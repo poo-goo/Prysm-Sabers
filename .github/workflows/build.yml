@@ -1,0 +1,48 @@
+name: Build
+
+env:
+  module_id: prism-sabers
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout
+        with:
+          submodules: true
+          lfs: true
+
+      - name: Setup QPM
+        uses: Fernthedev/qpm-action@v1
+        with:
+          workflow_token: ${{ secrets.GITHUB_TOKEN }}
+          restore: true
+          resolve_ndk: true
+          cache: true
+
+      - name: Build and create QMOD
+        run: |
+          cd ${GITHUB_WORKSPACE}
+          qpm qmod zip
+
+      - name: Get output names
+        id: names
+        run: |
+          pattern="*.qmod"
+          files=( $pattern )
+          echo QMOD="${files[0]}" >> $GITHUB_OUTPUT
+
+      - name: Upload QMOD
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.names.outputs.QMOD }}
+          path: ./${{ steps.names.outputs.QMOD }}
+          if-no-files-found: error
+
