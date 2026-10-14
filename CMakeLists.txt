@@ -31,10 +31,27 @@ add_compile_definitions("PAPER_ROOT_FOLDER_LENGTH=${FOLDER_LENGTH}")
 file(GLOB cpp_file_list ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 
 # beatsaber-hook 6.x expects each mod to compile its inline-hook source (this provides A64HookFunction).
-# The old v2 build did this; the flat CMakeLists was missing it, which caused the linker error.
-file(GLOB_RECURSE hook_cpp_list ${CMAKE_CURRENT_SOURCE_DIR}/extern/includes/beatsaber-hook/*.cpp)
-list(FILTER hook_cpp_list INCLUDE REGEX "And64InlineHook\\.cpp$")
+# qpm may expose the package as a symlink, so follow symlinks and also check qpm's cache folder.
+set(hook_roots
+    ${CMAKE_CURRENT_SOURCE_DIR}/extern/includes/beatsaber-hook
+    $ENV{HOME}/.local/share/QPM-RS/cache/beatsaber-hook)
+set(hook_cpp_list "")
+foreach(root ${hook_roots})
+    if(EXISTS ${root})
+        file(GLOB_RECURSE found FOLLOW_SYMLINKS ${root}/*And64InlineHook.cpp)
+        list(APPEND hook_cpp_list ${found})
+    endif()
+endforeach()
+if(hook_cpp_list)
+    list(GET hook_cpp_list 0 hook_cpp_list)  # keep only the first match to avoid duplicate symbols
+endif()
 message(STATUS "inline hook sources found: ${hook_cpp_list}")
+
+# diagnostics, so a failed build tells us where the files really are
+execute_process(COMMAND ls -la ${CMAKE_CURRENT_SOURCE_DIR}/extern/includes OUTPUT_VARIABLE _ls_out ERROR_VARIABLE _ls_err)
+message(STATUS "extern/includes: ${_ls_out}${_ls_err}")
+file(GLOB_RECURSE _diag FOLLOW_SYMLINKS ${CMAKE_CURRENT_SOURCE_DIR}/extern/includes/beatsaber-hook/*inline* ${CMAKE_CURRENT_SOURCE_DIR}/extern/includes/beatsaber-hook/*And64* ${CMAKE_CURRENT_SOURCE_DIR}/extern/includes/beatsaber-hook/*.c)
+message(STATUS "inline-ish files in beatsaber-hook: ${_diag}")
 
 add_library(${COMPILE_ID} SHARED ${cpp_file_list} ${hook_cpp_list})
 target_include_directories(${COMPILE_ID} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
