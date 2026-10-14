@@ -17,7 +17,7 @@
 #include "UnityEngine/Quaternion.hpp"
 #include "UnityEngine/Shader.hpp"
 #include "UnityEngine/Time.hpp"
-#include "beatsaber-hook/shared/hooking.hpp"
+#include "beatsaber-hook/shared/utils/hooking.hpp"
 #include "config.hpp"
 #include "main.hpp"
 
