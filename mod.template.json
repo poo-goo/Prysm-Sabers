@@ -9,7 +9,9 @@
   "description": "High-performance, fully customizable sabers: layered trails, motion blur, glow and cut effects.",
   "dependencies": [],
   "modFiles": [],
-  "lateModFiles": [],
+  "lateModFiles": [
+    "libprism-sabers.so"
+  ],
   "libraryFiles": [],
   "fileCopies": []
 }
