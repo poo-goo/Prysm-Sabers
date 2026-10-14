@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/QuestPackageManager/QPM.Package/refs/heads/main/qpm.schema.json",
+  "version": "0.2.0",
+  "sharedDir": "shared",
+  "dependenciesDir": "extern",
+  "info": {
+    "name": "PrismSabers",
+    "id": "prism-sabers",
+    "version": "0.2.0",
+    "additionalData": {
+      "overrideSoName": "libprism-sabers.so",
+      "cmake": true
+    }
+  },
+  "workspace": {
+    "scripts": {
+      "build": ["python ./extern/includes/mod-scripts/shared/build.py $0:?"],
+      "copy": ["python ./extern/includes/mod-scripts/shared/cpy.py $0:?"],
+      "log": ["python ./extern/includes/mod-scripts/shared/log.py $0:?"]
+    },
+    "ndk": "^27.2.12479018",
+    "qmodIncludeDirs": ["./build", "./extern/libs"],
+    "qmodIncludeFiles": [],
+    "qmodOutput": "./PrismSabers.qmod"
+  },
+  "dependencies": [
+    { "id": "mod-scripts", "versionRange": "^1.0.2", "additionalData": {} },
+    { "id": "scotland2", "versionRange": "^0.1.4", "additionalData": { "includeQmod": false } },
+    { "id": "paper2_scotland2", "versionRange": "^4.6.1", "additionalData": {} },
+    { "id": "beatsaber-hook", "versionRange": "^6.4.2", "additionalData": {} },
+    { "id": "bs-cordl", "versionRange": ">=4008.0.0, <4009.0.0", "additionalData": {} },
+    { "id": "custom-types", "versionRange": "^0.18.2", "additionalData": {} },
+    { "id": "bsml", "versionRange": "=0.4.55", "additionalData": {} },
+    { "id": "config-utils", "versionRange": ">=1.4.0, <3.0.0", "additionalData": {} }
+  ]
+}
