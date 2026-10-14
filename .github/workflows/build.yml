@@ -25,7 +25,7 @@ jobs:
           workflow_token: ${{ secrets.GITHUB_TOKEN }}
           restore: true
           resolve_ndk: true
-          cache: true
+          cache: false
 
       - name: Build and create QMOD
         run: |
