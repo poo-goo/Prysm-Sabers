@@ -30,7 +30,13 @@ add_compile_definitions("PAPER_ROOT_FOLDER_LENGTH=${FOLDER_LENGTH}")
 # FLAT LAYOUT: all .cpp/.hpp files live in the repo root (no src/ or include/ folders)
 file(GLOB cpp_file_list ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 
-add_library(${COMPILE_ID} SHARED ${cpp_file_list})
+# beatsaber-hook 6.x expects each mod to compile its inline-hook source (this provides A64HookFunction).
+# The old v2 build did this; the flat CMakeLists was missing it, which caused the linker error.
+file(GLOB_RECURSE hook_cpp_list ${CMAKE_CURRENT_SOURCE_DIR}/extern/includes/beatsaber-hook/*.cpp)
+list(FILTER hook_cpp_list INCLUDE REGEX "And64InlineHook\\.cpp$")
+message(STATUS "inline hook sources found: ${hook_cpp_list}")
+
+add_library(${COMPILE_ID} SHARED ${cpp_file_list} ${hook_cpp_list})
 target_include_directories(${COMPILE_ID} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(${COMPILE_ID} PRIVATE -llog)
 
