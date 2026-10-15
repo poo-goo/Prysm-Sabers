@@ -2,7 +2,7 @@
 
 #include "config-utils/shared/config-utils.hpp"
 
-namespace PrismSabers {
+namespace PrysmSabers {
     enum ColorSource { SaberColor = 0, CustomColor = 1, Rainbow = 2, SaberToCustom = 3 };
     inline std::vector<std::string> const ColorSourceNames = {"Saber", "Custom", "Rainbow", "Saber > Custom"};
     inline std::vector<std::string> const SaberColorModeNames = {"Game", "Custom", "Rainbow"};
@@ -24,8 +24,9 @@ namespace PrismSabers {
     CONFIG_VALUE(p##CustomColor, UnityEngine::Color, label " Tint", UnityEngine::Color(__VA_ARGS__));
 
 DECLARE_CONFIG(Config) {
-    CONFIG_VALUE(Enabled, bool, "Enable PrismSabers", true);
-    CONFIG_VALUE(HideVanillaTrail, bool, "Hide Vanilla Trail", true, "Replace the stock trail with PrismSabers layers");
+    CONFIG_VALUE(Enabled, bool, "Enable Prysm Sabers", true);
+    CONFIG_VALUE(HideVanillaTrail, bool, "Hide Vanilla Trail", true, "Replace the stock trail with Prysm Sabers layers");
+    CONFIG_VALUE(PreviewEnabled, bool, "Live Preview", true, "Show two swinging preview sabers in front of you while the Prysm menu is open");
     CONFIG_VALUE(PerformanceMode, bool, "Performance Mode", false, "Caps detail at 12, disables blur and softness");
 
     // Saber colors
@@ -38,17 +39,23 @@ DECLARE_CONFIG(Config) {
     CONFIG_VALUE(GlowIntensity, float, "Glow", 1.0f, "Blade glow intensity");
 
     // Layers: (prefix, label, enabled, length, detail, start, end, opacity, fade, white, softness, colorSource, tint rgba)
-    TRAIL_LAYER(Main, "Trail", true, 0.30f, 40, 0.0f, 1.0f, 0.9f, 1.6f, 0.06f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Glow, "Aura", true, 0.18f, 24, 0.55f, 1.06f, 0.35f, 2.4f, 0.0f, 0.6f, 0, 1.0f, 0.85f, 0.4f, 1.0f)
-    TRAIL_LAYER(Blur, "Blur", true, 0.07f, 16, 0.0f, 1.0f, 0.6f, 1.2f, 0.25f, 0.7f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    CONFIG_VALUE(BlurMinSpeed, float, "Blur Min Speed", 2.0f, "Tip speed (m/s) where blur starts to appear");
-    CONFIG_VALUE(BlurFullSpeed, float, "Blur Full Speed", 9.0f, "Tip speed (m/s) where blur reaches full strength");
+    // Defaults = the "Prism" preset: curve sheet + tip ribbon + soft aura + snap blur.
+    TRAIL_LAYER(Main, "Trail", false, 0.30f, 40, 0.0f, 1.0f, 0.8f, 1.5f, 0.05f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Glow, "Aura", true, 0.16f, 24, 0.5f, 1.08f, 0.35f, 2.2f, 0.0f, 0.7f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Blur, "Blur", true, 0.06f, 14, 0.0f, 1.0f, 0.55f, 1.4f, 0.2f, 0.8f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Curve, "Curve", true, 0.22f, 40, 0.05f, 1.0f, 0.85f, 1.3f, 0.0f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Ribbon, "Ribbon", true, 0.28f, 36, 0.955f, 1.0f, 1.0f, 0.9f, 0.4f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    CONFIG_VALUE(CurveTaper, float, "Curve Taper", 1.8f, "How strongly the curve sheet narrows toward the hilt (higher = more whip-like)");
+    CONFIG_VALUE(BlurSnap, bool, "Blur Snap", true, "Blur switches on/off instantly with speed (like ReeSabers) instead of fading");
+    CONFIG_VALUE(BlurSpread, float, "Blur Spread", 0.35f, "How much of the blur extends ahead of the saber (0 = trailing only, higher = blurs the saber itself)");
+    CONFIG_VALUE(BlurMinSpeed, float, "Blur Min Speed", 3.0f, "Tip speed (m/s) where blur switches on");
+    CONFIG_VALUE(BlurFullSpeed, float, "Blur Full Speed", 9.0f, "Tip speed (m/s) where blur reaches full length");
 
     // Saber model
     CONFIG_VALUE(PositionOffset, UnityEngine::Vector3, "Pos Offset (cm)", UnityEngine::Vector3(0, 0, 0));
     CONFIG_VALUE(RotationOffset, UnityEngine::Vector3, "Rot Offset (deg)", UnityEngine::Vector3(0, 0, 0));
     CONFIG_VALUE(LengthScale, float, "Blade Length", 1.0f, "Visual only, hitboxes are unchanged");
-    CONFIG_VALUE(ThicknessScale, float, "Blade Width", 1.0f, "Visual only, hitboxes are unchanged");
+    CONFIG_VALUE(ThicknessScale, float, "Blade Width", 0.65f, "Visual only, hitboxes are unchanged");
 
     // Effects
     CONFIG_VALUE(CutSparkles, float, "Sparkles", 1.0f, "Multiplier for sparkle particles on note cuts");
@@ -62,7 +69,7 @@ DECLARE_CONFIG(Config) {
 
 #undef TRAIL_LAYER
 
-namespace PrismSabers {
+namespace PrysmSabers {
     void ApplyPreset(int preset);
-    inline std::vector<std::string> const PresetNames = {"Prism (default)", "Neon", "Silk", "Inferno", "Vanilla+", "Potato (max FPS)"};
+    inline std::vector<std::string> const PresetNames = {"Prysm (default)", "Neon", "Silk", "Inferno", "Vanilla+", "Laser", "Whip", "Potato (max FPS)"};
 }

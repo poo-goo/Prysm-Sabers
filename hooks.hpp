@@ -1,5 +1,5 @@
 #pragma once
 
-namespace PrismSabers {
+namespace PrysmSabers {
     void InstallHooks();
 }

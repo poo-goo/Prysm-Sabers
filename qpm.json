@@ -4,11 +4,11 @@
   "sharedDir": "shared",
   "dependenciesDir": "extern",
   "info": {
-    "name": "PrismSabers",
-    "id": "prism-sabers",
+    "name": "Prysm Sabers",
+    "id": "prysm-sabers",
     "version": "0.2.0",
     "additionalData": {
-      "overrideSoName": "libprism-sabers.so",
+      "overrideSoName": "libprysm-sabers.so",
       "cmake": true
     }
   },
@@ -21,7 +21,7 @@
     "ndk": "^27.2.12479018",
     "qmodIncludeDirs": ["./build", "./extern/libs"],
     "qmodIncludeFiles": [],
-    "qmodOutput": "./PrismSabers.qmod"
+    "qmodOutput": "./PrysmSabers.qmod"
   },
   "dependencies": [
     { "id": "mod-scripts", "versionRange": "^1.0.2", "additionalData": {} },

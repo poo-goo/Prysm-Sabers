@@ -14,7 +14,7 @@
 #include "UnityEngine/Vector3.hpp"
 #include "custom-types/shared/macros.hpp"
 
-DECLARE_CLASS_CODEGEN(PrismSabers, PrismTrailLayer, UnityEngine::MonoBehaviour) {
+DECLARE_CLASS_CODEGEN(PrysmSabers, PrismTrailLayer, UnityEngine::MonoBehaviour) {
     DECLARE_INSTANCE_FIELD(UnityW<UnityEngine::Mesh>, mesh);
     DECLARE_INSTANCE_FIELD(UnityW<UnityEngine::MeshRenderer>, meshRenderer);
     DECLARE_INSTANCE_FIELD(ArrayW<UnityEngine::Vector3>, vertices);
@@ -31,12 +31,15 @@ DECLARE_CLASS_CODEGEN(PrismSabers, PrismTrailLayer, UnityEngine::MonoBehaviour) 
     void SetVisible(bool visible);
 };
 
-DECLARE_CLASS_CODEGEN(PrismSabers, PrismTrail, UnityEngine::MonoBehaviour) {
+DECLARE_CLASS_CODEGEN(PrysmSabers, PrismTrail, UnityEngine::MonoBehaviour) {
     DECLARE_INSTANCE_FIELD(UnityW<GlobalNamespace::Saber>, saber);
     DECLARE_INSTANCE_FIELD(UnityW<GlobalNamespace::SaberModelController>, model);
     DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, mainLayer);
     DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, glowLayer);
     DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, blurLayer);
+    DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, curveLayer);
+    DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, ribbonLayer);
+    DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, bladeLayer);
 
     DECLARE_INSTANCE_METHOD(void, LateUpdate);
     DECLARE_INSTANCE_METHOD(void, OnEnable);
@@ -52,6 +55,8 @@ DECLARE_CLASS_CODEGEN(PrismSabers, PrismTrail, UnityEngine::MonoBehaviour) {
     };
 
     void Setup(GlobalNamespace::Saber* saber, GlobalNamespace::SaberModelController* model, UnityEngine::Material* material, int layer);
+    // Menu preview: no game saber, a scripted swing instead
+    void SetupPreview(UnityEngine::Material* material, int layer, bool left, UnityEngine::Vector3 origin, UnityEngine::Vector3 right);
 
    private:
     std::array<Sample, HistorySize> history;
@@ -67,14 +72,29 @@ DECLARE_CLASS_CODEGEN(PrismSabers, PrismTrail, UnityEngine::MonoBehaviour) {
     float lastIntensity;
     int lastMode;
     bool modified;
+    bool blurOn;
+    bool preview;
+    UnityEngine::Vector3 pvOrigin;
+    UnityEngine::Vector3 pvRight;
+
+    void InitCommon(UnityEngine::Material* material, int layer);
+    void PreviewPose(float now, UnityEngine::Vector3& bottom, UnityEngine::Vector3& top);
+    void DrawPreviewBlade(float now, UnityEngine::Vector3 bottom, UnityEngine::Vector3 top);
 
     void Push(Sample const& sample);
     Sample Evaluate(float time) const;
-    void BuildLayer(PrismTrailLayer* layer, int which, float now, float speedFactor);
+    void BuildLayer(PrismTrailLayer* layer, int which, float now, float speedFactor, float blurFactor);
     UnityEngine::Color BaseColor(float now) const;
     void ApplyBladeColors(float now);
 };
 
-namespace PrismSabers {
+namespace PrysmSabers {
     UnityEngine::Color HSV(float h, float s, float v);
+
+    // Menu preview helpers
+    void CacheTrailMaterial(UnityEngine::Material* material, int layer);
+    bool PreviewAvailable();
+    void ShowPreview();
+    void HidePreview();
+    bool PreviewVisible();
 }

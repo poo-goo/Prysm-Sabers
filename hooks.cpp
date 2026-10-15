@@ -61,7 +61,7 @@ MAKE_HOOK_MATCH(
     }
     if (!material) {
         // Leave the vanilla trail alone: otherwise the player would end up with no trail at all.
-        logger.error("Could not find a trail material; PrismSabers trails disabled for this saber");
+        logger.error("Could not find a trail material; Prysm Sabers trails disabled for this saber");
         return;
     }
 
@@ -72,7 +72,8 @@ MAKE_HOOK_MATCH(
             logger.info("Trail material shader: {}", std::string(shader->get_name()));
     }
 
-    auto prism = self->get_gameObject()->AddComponent<PrismSabers::PrismTrail*>();
+    PrysmSabers::CacheTrailMaterial(material, layer);
+    auto prism = self->get_gameObject()->AddComponent<PrysmSabers::PrismTrail*>();
     prism->Setup(saber, self, material, layer);
 
     // Only hide the vanilla trail once ours exists.
@@ -106,7 +107,7 @@ MAKE_HOOK_MATCH(
         switch (c.CutColorMode.GetValue()) {
             case 1: color = Color32(0, 255, 255, 255, 255); break;
             case 2: {
-                auto rgb = PrismSabers::HSV(Time::get_time() * c.RainbowSpeed.GetValue(), c.RainbowSaturation.GetValue(), 1.0f);
+                auto rgb = PrysmSabers::HSV(Time::get_time() * c.RainbowSpeed.GetValue(), c.RainbowSaturation.GetValue(), 1.0f);
                 color = Color32(0, (uint8_t) (rgb.r * 255), (uint8_t) (rgb.g * 255), (uint8_t) (rgb.b * 255), color.a);
                 break;
             }
@@ -127,6 +128,11 @@ MAKE_HOOK_MATCH(SaberClashEffect_LateUpdate, &SaberClashEffect::LateUpdate, void
 
 MAKE_HOOK_MATCH(SaberBurnMarkArea_LateUpdate, &SaberBurnMarkArea::LateUpdate, void, SaberBurnMarkArea* self) {
     auto& c = getConfig();
+    static bool logged = false;
+    if (!logged) {
+        logged = true;
+        logger.info("SaberBurnMarkArea::LateUpdate is running (Enabled={}, BurnMarks={})", c.Enabled.GetValue(), c.BurnMarks.GetValue());
+    }
     if (c.Enabled.GetValue() && !c.BurnMarks.GetValue())
         return;
     SaberBurnMarkArea_LateUpdate(self);
@@ -139,7 +145,7 @@ MAKE_HOOK_MATCH(SaberBurnMarkSparkles_LateUpdate, &SaberBurnMarkSparkles::LateUp
     SaberBurnMarkSparkles_LateUpdate(self);
 }
 
-void PrismSabers::InstallHooks() {
+void PrysmSabers::InstallHooks() {
     INSTALL_HOOK(logger, SaberModelController_Init);
     INSTALL_HOOK(logger, NoteCutParticlesEffect_SpawnParticles);
     INSTALL_HOOK(logger, SaberClashEffect_LateUpdate);

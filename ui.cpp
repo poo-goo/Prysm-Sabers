@@ -3,21 +3,43 @@
 #include "UnityEngine/GameObject.hpp"
 #include "UnityEngine/Object.hpp"
 #include "UnityEngine/Transform.hpp"
+#include "UnityEngine/UI/LayoutElement.hpp"
 #include "bsml/shared/BSML-Lite.hpp"
+#include "PrismTrail.hpp"
 #include "config.hpp"
 
 using namespace UnityEngine;
 
-namespace PrismSabers {
+DEFINE_TYPE(PrysmSabers, PrysmTabWatcher);
+
+void PrysmSabers::PrysmTabWatcher::OnEnable() {
+    if (getConfig().PreviewEnabled.GetValue())
+        PrysmSabers::ShowPreview();
+}
+void PrysmSabers::PrysmTabWatcher::OnDisable() { PrysmSabers::HidePreview(); }
+void PrysmSabers::PrysmTabWatcher::OnDestroy() { PrysmSabers::HidePreview(); }
+
+namespace PrysmSabers {
     namespace {
         // The menu is split into pages. Only one page's controls exist at a time, which keeps the menu
         // fast to open, stops long lists from running off the panel, and avoids overlapping rows.
-        constexpr int SectionCount = 7;
-        constexpr char const* SectionNames[SectionCount] = {"General", "Colors", "Trail", "Aura", "Blur", "Saber", "Effects"};
+        constexpr int SectionCount = 9;
+        constexpr char const* SectionNames[SectionCount] = {"General", "Colors", "Trail", "Curve", "Ribbon", "Aura", "Blur", "Saber", "Effects"};
         int currentSection = 0;
 
+        void FixHeight(UnityEngine::GameObject* go, float height) {
+            auto le = go->GetComponent<UnityEngine::UI::LayoutElement*>();
+            if (!le)
+                le = go->AddComponent<UnityEngine::UI::LayoutElement*>();
+            le->set_preferredHeight(height);
+            le->set_minHeight(height);
+        }
+
         void Header(Transform* parent, std::string_view text) {
-            BSML::Lite::CreateText(parent, fmt::format("<b><color=#7fdcff>{}</color></b>", text), TMPro::FontStyles::Normal, 5.0f);
+            auto t = BSML::Lite::CreateText(parent, fmt::format("<b><color=#7fdcff>{}</color></b>", text), TMPro::FontStyles::Normal, 5.0f);
+            t->set_enableWordWrapping(false);
+            t->set_overflowMode(TMPro::TextOverflowModes::Ellipsis);
+            FixHeight(t->get_gameObject(), 7.0f);  // without a set height the next row is drawn on top of the header
         }
 
 #define LAYER_UI(p)                                                              \
@@ -26,12 +48,13 @@ namespace PrismSabers {
     AddConfigValueColorPicker(parent, c.p##CustomColor);                         \
     AddConfigValueSliderIncrement(parent, c.p##Duration, 0.005f, 0.005f, 1.5f);  \
     AddConfigValueSliderIncrement(parent, c.p##Opacity, 0.05f, 0.0f, 1.0f);      \
-    AddConfigValueSliderIncrement(parent, c.p##Softness, 0.05f, 0.0f, 1.0f);     \
     AddConfigValueIncrementInt(parent, c.p##Granularity, 2, 2, 96);              \
     AddConfigValueSliderIncrement(parent, c.p##BaseOffset, 0.01f, 0.0f, 1.0f);   \
     AddConfigValueSliderIncrement(parent, c.p##TipOffset, 0.01f, 0.0f, 1.5f);    \
     AddConfigValueSliderIncrement(parent, c.p##Fade, 0.1f, 0.1f, 6.0f);          \
     AddConfigValueSliderIncrement(parent, c.p##WhiteHead, 0.01f, 0.0f, 1.0f);
+
+#define LAYER_SOFT(p) AddConfigValueSliderIncrement(parent, c.p##Softness, 0.05f, 0.0f, 1.0f);
 
         void Build(Transform* host);
 
@@ -54,6 +77,7 @@ namespace PrismSabers {
 
             // page navigation
             auto row = BSML::Lite::CreateHorizontalLayoutGroup(parent);
+            FixHeight(row->get_gameObject(), 9.0f);
             BSML::Lite::CreateUIButton(row->get_transform(), "< Prev", [h]() {
                 currentSection = (currentSection + SectionCount - 1) % SectionCount;
                 Rebuild(h);
@@ -69,6 +93,19 @@ namespace PrismSabers {
                     AddConfigValueToggle(parent, c.Enabled);
                     AddConfigValueToggle(parent, c.HideVanillaTrail);
                     AddConfigValueToggle(parent, c.PerformanceMode);
+                    BSML::Lite::CreateUIButton(parent, c.PreviewEnabled.GetValue() ? "Live Preview: ON" : "Live Preview: OFF", [h]() {
+                        bool on = !getConfig().PreviewEnabled.GetValue();
+                        getConfig().PreviewEnabled.SetValue(on);
+                        if (on)
+                            ShowPreview();
+                        else
+                            HidePreview();
+                        Rebuild(h);
+                    });
+                    if (c.PreviewEnabled.GetValue() && !PreviewAvailable()) {
+                        auto note = BSML::Lite::CreateText(parent, "Preview needs the game's trail material.\nPlay any song once, then reopen this tab.", TMPro::FontStyles::Normal, 3.2f);
+                        FixHeight(note->get_gameObject(), 12.0f);
+                    }
                     Header(parent, "Presets");
                     for (int i = 0; i < (int) PresetNames.size(); i++) {
                         BSML::Lite::CreateUIButton(parent, PresetNames[i], [i, h]() {
@@ -86,14 +123,22 @@ namespace PrismSabers {
                     AddConfigValueSliderIncrement(parent, c.RainbowOffset, 0.05f, 0.0f, 1.0f);
                     AddConfigValueSliderIncrement(parent, c.GlowIntensity, 0.05f, 0.0f, 3.0f);
                     break;
-                case 2: LAYER_UI(Main) break;
-                case 3: LAYER_UI(Glow) break;
-                case 4:
+                case 2: LAYER_UI(Main) LAYER_SOFT(Main) break;
+                case 3:
+                    LAYER_UI(Curve)
+                    AddConfigValueSliderIncrement(parent, c.CurveTaper, 0.1f, 0.2f, 6.0f);
+                    break;
+                case 4: LAYER_UI(Ribbon) LAYER_SOFT(Ribbon) break;
+                case 5: LAYER_UI(Glow) LAYER_SOFT(Glow) break;
+                case 6:
+                    AddConfigValueToggle(parent, c.BlurSnap);
                     LAYER_UI(Blur)
+                    LAYER_SOFT(Blur)
+                    AddConfigValueSliderIncrement(parent, c.BlurSpread, 0.05f, 0.0f, 0.8f);
                     AddConfigValueSliderIncrement(parent, c.BlurMinSpeed, 0.5f, 0.0f, 20.0f);
                     AddConfigValueSliderIncrement(parent, c.BlurFullSpeed, 0.5f, 0.5f, 30.0f);
                     break;
-                case 5:
+                case 7:
                     AddConfigValueIncrementVector3(parent, c.PositionOffset, 1, 0.5);
                     AddConfigValueIncrementVector3(parent, c.RotationOffset, 0, 5.0);
                     AddConfigValueSliderIncrement(parent, c.LengthScale, 0.05f, 0.25f, 2.0f);
@@ -113,7 +158,16 @@ namespace PrismSabers {
     }
 
     void SettingsDidActivate(HMUI::ViewController* self, bool firstActivation, bool, bool) {
-        if (firstActivation)
+        if (firstActivation) {
             Build(self->get_transform());
+            self->get_gameObject()->AddComponent<PrysmTabWatcher*>();
+        }
+    }
+
+    void GameplayTabDidActivate(GameObject* self, bool firstActivation) {
+        if (firstActivation) {
+            Build(self->get_transform());
+            self->AddComponent<PrysmTabWatcher*>();
+        }
     }
 }
