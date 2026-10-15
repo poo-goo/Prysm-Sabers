@@ -1,3 +1,6 @@
+#include <utility>
+#include <vector>
+
 #include "PrismTrail.hpp"
 
 #include <algorithm>
@@ -11,6 +14,9 @@
 #include "GlobalNamespace/SetSaberGlowColor.hpp"
 #include "GlobalNamespace/TubeBloomPrePassLight.hpp"
 #include "UnityEngine/Camera.hpp"
+#include "UnityEngine/Shader.hpp"
+#include "UnityEngine/MeshRenderer.hpp"
+#include "UnityEngine/Mesh.hpp"
 #include "UnityEngine/GameObject.hpp"
 #include "UnityEngine/Object.hpp"
 #include "UnityEngine/Resources.hpp"
@@ -99,13 +105,17 @@ void PrismTrailLayer::Init(Material* material, int sortingOrder) {
     meshRenderer->set_sortingOrder(sortingOrder);
     granularity = 0;
     crossCount = 0;
+    flipV = false;
+    flatU = false;
 }
 
-void PrismTrailLayer::Resize(int gran, int cross) {
-    if (gran == granularity && cross == crossCount && vertices)
+void PrismTrailLayer::Resize(int gran, int cross, bool flip, bool flat) {
+    if (gran == granularity && cross == crossCount && flip == flipV && flat == flatU && vertices)
         return;
     granularity = gran;
     crossCount = cross;
+    flipV = flip;
+    flatU = flat;
     // cross = vertices across the blade for each time sample (2 = classic hard strip, 8 = feathered edges)
     int vertCount = (gran + 1) * cross;
     vertices = ArrayW<Vector3>(il2cpp_array_size_t(vertCount));
@@ -125,9 +135,11 @@ void PrismTrailLayer::Resize(int gran, int cross) {
         }
     }
     for (int i = 0; i <= gran; i++) {
-        float u = (float) i / gran;
-        for (int j = 0; j < cross; j++)
-            uvs[i * cross + j] = {u, (float) j / (cross - 1)};
+        float u = flat ? 0.0f : (float) i / gran;
+        for (int j = 0; j < cross; j++) {
+            float t = (float) j / (cross - 1);
+            uvs[i * cross + j] = {u, flip ? 1.0f - t : t};
+        }
     }
     mesh->Clear();
     mesh->set_vertices(vertices);
@@ -156,16 +168,17 @@ void PrismTrail::Setup(GlobalNamespace::Saber* saber, GlobalNamespace::SaberMode
     InitCommon(material, layer);
 }
 
-void PrismTrail::SetupPreview(Material* material, int layer, bool left, Vector3 origin, Vector3 right) {
+void PrismTrail::SetupPreview(Material* material, Material* solid, int layer, bool left, Vector3 origin, Vector3 right, Vector3 forward) {
     preview = true;
     isLeft = left;
     gameColor = left ? Color(1.0f, 0.1f, 0.2f, 1.0f) : Color(0.1f, 0.6f, 1.0f, 1.0f);
     pvOrigin = origin;
     pvRight = right;
-    InitCommon(material, layer);
+    pvForward = forward;
+    InitCommon(material, layer, solid);
 }
 
-void PrismTrail::InitCommon(Material* material, int layer) {
+void PrismTrail::InitCommon(Material* material, int layer, Material* solid) {
     head = 0;
     count = 0;
     frames = 0;
@@ -184,7 +197,7 @@ void PrismTrail::InitCommon(Material* material, int layer) {
         auto go = GameObject::New_ctor(names[i]);
         go->set_layer(layer);
         auto l = go->AddComponent<PrismTrailLayer*>();
-        l->Init(material, orders[i]);
+        l->Init(i == 5 && solid ? solid : material, orders[i]);
         switch (i) {
             case 0: mainLayer = l; break;
             case 1: glowLayer = l; break;
@@ -273,7 +286,7 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
     int gran = std::clamp(cfg.granularity, 2, perf ? 12 : 96);
     float soft = perf ? 0.0f : std::clamp(cfg.soft, 0.0f, 1.0f);
     int cross = (isCurve || soft > 0.01f) ? SoftCross : 2;
-    layer->Resize(gran, cross);
+    layer->Resize(gran, cross, c.FlipTrailV.GetValue(), false);
     layer->SetVisible(true);
 
     Color base = BaseColor(now);
@@ -332,6 +345,9 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
             case CustomColor: col = cfg.custom; break;
             case Rainbow: col = HSV(now * c.RainbowSpeed.GetValue() + u * 0.6f + (isLeft ? 0.0f : c.RainbowOffset.GetValue()), c.RainbowSaturation.GetValue(), 1.0f); break;
             case SaberToCustom: col = Lerp(base, cfg.custom, u); break;
+            case GradientColor:
+                col = isLeft ? Lerp(c.GradLeftStart.GetValue(), c.GradLeftEnd.GetValue(), u) : Lerp(c.GradRightStart.GetValue(), c.GradRightEnd.GetValue(), u);
+                break;
             default: col = base; break;
         }
         float a;
@@ -471,8 +487,11 @@ void PrismTrail::LateUpdate() {
     if (ribbonLayer) BuildLayer(ribbonLayer.ptr(), 4, now, speedFactor, blurFactor);
     if (preview)
         DrawPreviewBlade(now, bottom, top);
-    else
+    else {
         ApplyBladeColors(now);
+        if (bladeMat)
+            bladeMat->set_color(BaseColor(now));
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -486,7 +505,8 @@ void PrismTrail::PreviewPose(float now, Vector3& bottom, Vector3& top) {
     float theta = 1.25f * std::sin(a);  // wide, fast sweep so the blur and curve layers have something to show
     Vector3 up{0, 1, 0};
     Vector3 dir = Add(Mul(up, std::cos(theta)), Mul(pvRight, std::sin(theta) * s));
-    Vector3 hand = Add(Add(pvOrigin, Mul(pvRight, 0.30f * s)), Mul(up, 0.08f * std::sin(2.0f * a)));
+    Vector3 anchor = Add(Add(Add(pvOrigin, Mul(pvRight, c.PreviewX.GetValue())), Mul(up, c.PreviewY.GetValue())), Mul(pvForward, c.PreviewZ.GetValue()));
+    Vector3 hand = Add(Add(anchor, Mul(pvRight, 0.30f * s)), Mul(up, 0.08f * std::sin(2.0f * a)));
     bottom = Add(hand, Mul(dir, 0.16f));
     top = Add(bottom, Mul(dir, 1.0f * std::max(c.LengthScale.GetValue(), 0.1f)));
 }
@@ -496,7 +516,7 @@ void PrismTrail::DrawPreviewBlade(float now, Vector3 bottom, Vector3 top) {
     if (!layer)
         return;
     auto& c = getConfig();
-    layer->Resize(3, 2);
+    layer->Resize(3, 2, false, true);
     layer->SetVisible(true);
 
     auto cam = Camera::get_main();
@@ -509,7 +529,7 @@ void PrismTrail::DrawPreviewBlade(float now, Vector3 bottom, Vector3 top) {
     float hiltW = 0.016f, bladeW = 0.014f * thick;
     auto hiltBottom = Sub(bottom, Mul(dir, 0.16f));
     auto col = BaseColor(now);
-    Color hilt{0.35f, 0.35f, 0.38f, 1.0f};
+    Color hilt{0.03f, 0.03f, 0.035f, 1.0f};
     Color blade{col.r, col.g, col.b, 1.0f};
 
     auto verts = layer->vertices;
@@ -567,28 +587,143 @@ namespace PrysmSabers {
         }
     }
 
-    void ShowPreview() {
+    static UnityW<Material> g_solidMaterial;
+
+    // flat, unlit, alpha-blended material for solid parts (black handle, blade); built-in shader, so it is always there
+    static Material* SolidMaterial() {
+        if (g_solidMaterial)
+            return g_solidMaterial.ptr();
+        auto shader = Shader::Find("Sprites/Default");
+        if (!shader)
+            return nullptr;
+        g_solidMaterial = Material::New_ctor(shader);
+        return g_solidMaterial.ptr();
+    }
+
+    void ShowPreview(Transform* anchor) {
         if (PreviewVisible())
             return;
         auto material = FindTrailMaterial();
         if (!material)
             return;
-        // place the preview in front of the player, a little below eye level
-        Vector3 origin{0, 1.0f, 1.7f}, right{1, 0, 0};
-        if (auto cam = Camera::get_main()) {
+        // fixed position next to the menu panel (the offsets are applied live from the settings)
+        Vector3 origin{0, 1.6f, 3.0f}, right{1, 0, 0}, fwd{0, 0, 1};
+        if (anchor) {
+            origin = anchor->get_position();
+            right = Norm(anchor->get_right());
+            fwd = Norm(anchor->get_forward());
+        } else if (auto cam = Camera::get_main()) {
             auto t = cam->get_transform();
-            auto fwd = t->get_forward();
+            fwd = t->get_forward();
             fwd.y = 0;
             fwd = Norm(fwd);
-            auto pos = t->get_position();
-            origin = Add(Add(pos, Mul(fwd, 1.7f)), Vector3{0, -0.55f, 0});
+            origin = Add(t->get_position(), Mul(fwd, 3.0f));
             right = Norm(Cross(Vector3{0, 1, 0}, fwd));
         }
+        auto solid = SolidMaterial();
         for (int i = 0; i < 2; i++) {
             auto go = GameObject::New_ctor(i == 0 ? "PrysmPreviewLeft" : "PrysmPreviewRight");
             auto trail = go->AddComponent<PrismTrail*>();
-            trail->SetupPreview(material, 0, i == 0, origin, right);
+            trail->SetupPreview(material, solid, 0, i == 0, origin, right, fwd);
             g_previewRoots[i] = go;
         }
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // Prysm saber model: black handle + simple thin blade, generated in code (no asset bundle needed)
+    // ----------------------------------------------------------------------------------------
+
+    static Mesh* MakeTube(Vector3 origin, Vector3 dir, Vector3 u, Vector3 v, std::vector<std::pair<float, float>> const& rings, int seg) {
+        int n = (int) rings.size();
+        int vcount = n * seg + 2;
+        auto verts = ArrayW<Vector3>(il2cpp_array_size_t(vcount));
+        auto tris = ArrayW<int>(il2cpp_array_size_t((n - 1) * seg * 6 + seg * 6));
+        for (int r = 0; r < n; r++) {
+            for (int s = 0; s < seg; s++) {
+                float ang = 6.2831853f * s / seg;
+                auto offset = Add(Mul(u, std::cos(ang) * rings[r].second), Mul(v, std::sin(ang) * rings[r].second));
+                verts[r * seg + s] = Add(Add(origin, Mul(dir, rings[r].first)), offset);
+            }
+        }
+        int bottomCenter = n * seg, topCenter = n * seg + 1;
+        verts[bottomCenter] = Add(origin, Mul(dir, rings[0].first));
+        verts[topCenter] = Add(origin, Mul(dir, rings[n - 1].first));
+        int t = 0;
+        for (int r = 0; r < n - 1; r++) {
+            for (int s = 0; s < seg; s++) {
+                int a = r * seg + s, b = r * seg + (s + 1) % seg, c2 = (r + 1) * seg + s, d = (r + 1) * seg + (s + 1) % seg;
+                tris[t++] = a; tris[t++] = b; tris[t++] = c2;
+                tris[t++] = c2; tris[t++] = b; tris[t++] = d;
+            }
+        }
+        for (int s = 0; s < seg; s++) {
+            int s2 = (s + 1) % seg;
+            tris[t++] = bottomCenter; tris[t++] = s2; tris[t++] = s;
+            tris[t++] = topCenter; tris[t++] = (n - 1) * seg + s; tris[t++] = (n - 1) * seg + s2;
+        }
+        auto mesh = Mesh::New_ctor();
+        mesh->set_vertices(verts);
+        mesh->set_triangles(tris);
+        mesh->RecalculateBounds();
+        return mesh;
+    }
+
+    void ApplyCustomModel(GlobalNamespace::SaberModelController* model, GlobalNamespace::Saber* saber, PrismTrail* trail) {
+        auto solid = SolidMaterial();
+        if (!solid) {
+            logger.warn("Sprites/Default shader not found; keeping the game saber model");
+            return;
+        }
+        auto bottomT = saber->_saberBladeBottomTransform;
+        auto topT = saber->_saberBladeTopTransform;
+        if (!bottomT || !topT)
+            return;
+        auto& c = getConfig();
+        auto root = model->get_transform();
+        Vector3 b = root->InverseTransformPoint(bottomT->get_position());
+        Vector3 tp = root->InverseTransformPoint(topT->get_position());
+        Vector3 dir = Norm(Sub(tp, b));
+        float bladeLen = Len(Sub(tp, b)) * std::max(c.LengthScale.GetValue(), 0.1f);
+        Vector3 helper = std::abs(dir.y) < 0.9f ? Vector3{0, 1, 0} : Vector3{1, 0, 0};
+        Vector3 u = Norm(Cross(dir, helper));
+        Vector3 v = Cross(dir, u);
+
+        // hide the game's handle and blade meshes, but keep the fake-glow sprites (they are the saber's soft glow)
+        int hidden = 0;
+        auto renderers = model->GetComponentsInChildren<MeshRenderer*>(true);
+        for (auto r : renderers) {
+            if (!r)
+                continue;
+            if (r->get_gameObject()->GetComponent<GlobalNamespace::Parametric3SliceSpriteController*>())
+                continue;
+            r->set_enabled(false);
+            hidden++;
+        }
+
+        float thick = std::clamp(c.ThicknessScale.GetValue(), 0.2f, 3.0f);
+        float r = 0.0105f * thick;
+        auto hiltMesh = MakeTube(b, dir, u, v, {{-0.17f, 0.0135f}, {-0.163f, 0.0172f}, {-0.03f, 0.0172f}, {0.0f, 0.0145f}}, 10);
+        auto bladeMesh = MakeTube(b, dir, u, v, {{0.0f, r}, {bladeLen - 0.025f, r}, {bladeLen - 0.008f, r * 0.8f}, {bladeLen, r * 0.4f}}, 8);
+
+        auto hiltMat = Material::New_ctor(solid);
+        hiltMat->set_color(Color(0.02f, 0.02f, 0.025f, 1.0f));
+        auto bladeMat = Material::New_ctor(solid);
+        bladeMat->set_color(Color(1, 1, 1, 1));
+
+        int layer = model->get_gameObject()->get_layer();
+        auto addPart = [&](char const* name, Mesh* mesh, Material* mat) {
+            auto go = GameObject::New_ctor(name);
+            go->set_layer(layer);
+            go->get_transform()->SetParent(root, false);
+            go->AddComponent<MeshFilter*>()->set_sharedMesh(mesh);
+            auto mr = go->AddComponent<MeshRenderer*>();
+            mr->set_sharedMaterial(mat);
+            mr->set_shadowCastingMode(Rendering::ShadowCastingMode::Off);
+            mr->set_receiveShadows(false);
+        };
+        addPart("PrysmHilt", hiltMesh, hiltMat);
+        addPart("PrysmBlade", bladeMesh, bladeMat);
+        trail->SetBladeMaterial(bladeMat);
+        logger.info("Prysm saber model applied (hid {} game renderers, blade length {})", hidden, bladeLen);
     }
 }

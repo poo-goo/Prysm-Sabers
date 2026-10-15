@@ -14,7 +14,7 @@ DEFINE_TYPE(PrysmSabers, PrysmTabWatcher);
 
 void PrysmSabers::PrysmTabWatcher::OnEnable() {
     if (getConfig().PreviewEnabled.GetValue())
-        PrysmSabers::ShowPreview();
+        PrysmSabers::ShowPreview(get_transform());
 }
 void PrysmSabers::PrysmTabWatcher::OnDisable() { PrysmSabers::HidePreview(); }
 void PrysmSabers::PrysmTabWatcher::OnDestroy() { PrysmSabers::HidePreview(); }
@@ -51,7 +51,7 @@ namespace PrysmSabers {
     AddConfigValueIncrementInt(parent, c.p##Granularity, 2, 2, 96);              \
     AddConfigValueSliderIncrement(parent, c.p##BaseOffset, 0.01f, 0.0f, 1.0f);   \
     AddConfigValueSliderIncrement(parent, c.p##TipOffset, 0.01f, 0.0f, 1.5f);    \
-    AddConfigValueSliderIncrement(parent, c.p##Fade, 0.1f, 0.1f, 6.0f);          \
+    AddConfigValueSliderIncrement(parent, c.p##Fade, 0.05f, 0.0f, 6.0f);          \
     AddConfigValueSliderIncrement(parent, c.p##WhiteHead, 0.01f, 0.0f, 1.0f);
 
 #define LAYER_SOFT(p) AddConfigValueSliderIncrement(parent, c.p##Softness, 0.05f, 0.0f, 1.0f);
@@ -97,7 +97,7 @@ namespace PrysmSabers {
                         bool on = !getConfig().PreviewEnabled.GetValue();
                         getConfig().PreviewEnabled.SetValue(on);
                         if (on)
-                            ShowPreview();
+                            ShowPreview(h.ptr());
                         else
                             HidePreview();
                         Rebuild(h);
@@ -106,6 +106,10 @@ namespace PrysmSabers {
                         auto note = BSML::Lite::CreateText(parent, "Preview needs the game's trail material.\nPlay any song once, then reopen this tab.", TMPro::FontStyles::Normal, 3.2f);
                         FixHeight(note->get_gameObject(), 12.0f);
                     }
+                    AddConfigValueSliderIncrement(parent, c.PreviewX, 0.1f, -4.0f, 4.0f);
+                    AddConfigValueSliderIncrement(parent, c.PreviewY, 0.1f, -3.0f, 3.0f);
+                    AddConfigValueSliderIncrement(parent, c.PreviewZ, 0.1f, -3.0f, 3.0f);
+                    AddConfigValueToggle(parent, c.FlipTrailV);
                     Header(parent, "Presets");
                     for (int i = 0; i < (int) PresetNames.size(); i++) {
                         BSML::Lite::CreateUIButton(parent, PresetNames[i], [i, h]() {
@@ -118,6 +122,10 @@ namespace PrysmSabers {
                     AddConfigValueIncrementEnum(parent, c.SaberColorMode, SaberColorModeNames);
                     AddConfigValueColorPicker(parent, c.LeftColor);
                     AddConfigValueColorPicker(parent, c.RightColor);
+                    AddConfigValueColorPicker(parent, c.GradLeftStart);
+                    AddConfigValueColorPicker(parent, c.GradLeftEnd);
+                    AddConfigValueColorPicker(parent, c.GradRightStart);
+                    AddConfigValueColorPicker(parent, c.GradRightEnd);
                     AddConfigValueSliderIncrement(parent, c.RainbowSpeed, 0.05f, 0.0f, 3.0f);
                     AddConfigValueSliderIncrement(parent, c.RainbowSaturation, 0.05f, 0.0f, 1.0f);
                     AddConfigValueSliderIncrement(parent, c.RainbowOffset, 0.05f, 0.0f, 1.0f);
@@ -139,6 +147,7 @@ namespace PrysmSabers {
                     AddConfigValueSliderIncrement(parent, c.BlurFullSpeed, 0.5f, 0.5f, 30.0f);
                     break;
                 case 7:
+                    AddConfigValueIncrementEnum(parent, c.SaberModel, SaberModelNames);
                     AddConfigValueIncrementVector3(parent, c.PositionOffset, 1, 0.5);
                     AddConfigValueIncrementVector3(parent, c.RotationOffset, 0, 5.0);
                     AddConfigValueSliderIncrement(parent, c.LengthScale, 0.05f, 0.25f, 2.0f);

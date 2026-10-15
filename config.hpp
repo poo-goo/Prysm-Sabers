@@ -3,8 +3,9 @@
 #include "config-utils/shared/config-utils.hpp"
 
 namespace PrysmSabers {
-    enum ColorSource { SaberColor = 0, CustomColor = 1, Rainbow = 2, SaberToCustom = 3 };
-    inline std::vector<std::string> const ColorSourceNames = {"Saber", "Custom", "Rainbow", "Saber > Custom"};
+    enum ColorSource { SaberColor = 0, CustomColor = 1, Rainbow = 2, SaberToCustom = 3, GradientColor = 4 };
+    inline std::vector<std::string> const ColorSourceNames = {"Saber", "Custom", "Rainbow", "Saber > Custom", "Gradient"};
+    inline std::vector<std::string> const SaberModelNames = {"Vanilla", "Prysm"};
     inline std::vector<std::string> const SaberColorModeNames = {"Game", "Custom", "Rainbow"};
     inline std::vector<std::string> const CutColorModeNames = {"Saber", "White", "Rainbow"};
 }
@@ -27,12 +28,21 @@ DECLARE_CONFIG(Config) {
     CONFIG_VALUE(Enabled, bool, "Enable Prysm Sabers", true);
     CONFIG_VALUE(HideVanillaTrail, bool, "Hide Vanilla Trail", true, "Replace the stock trail with Prysm Sabers layers");
     CONFIG_VALUE(PreviewEnabled, bool, "Live Preview", true, "Show two swinging preview sabers in front of you while the Prysm menu is open");
+    CONFIG_VALUE(FlipTrailV, bool, "Flip Trail Tex", true, "Flips the trail texture across the blade. Turn off if trails look upside down");
+    CONFIG_VALUE(PreviewX, float, "Preview Left/Right", -1.5f, "Meters, relative to the menu panel (negative = left)");
+    CONFIG_VALUE(PreviewY, float, "Preview Height", -0.7f, "Meters, relative to the menu panel");
+    CONFIG_VALUE(PreviewZ, float, "Preview Depth", -0.35f, "Meters toward you (negative) or away from you (positive)");
     CONFIG_VALUE(PerformanceMode, bool, "Performance Mode", false, "Caps detail at 12, disables blur and softness");
 
     // Saber colors
     CONFIG_VALUE(SaberColorMode, int, "Color Mode", 0);
     CONFIG_VALUE(LeftColor, UnityEngine::Color, "Left Color", UnityEngine::Color(1.0f, 0.1f, 0.35f, 1.0f));
     CONFIG_VALUE(RightColor, UnityEngine::Color, "Right Color", UnityEngine::Color(0.1f, 0.6f, 1.0f, 1.0f));
+    // Gradient colours (used when a layer's colour source is "Gradient"): blade side -> tail
+    CONFIG_VALUE(GradLeftStart, UnityEngine::Color, "Grad L Start", UnityEngine::Color(1.0f, 0.1f, 0.0f, 1.0f));
+    CONFIG_VALUE(GradLeftEnd, UnityEngine::Color, "Grad L End", UnityEngine::Color(1.0f, 0.6f, 0.05f, 1.0f));
+    CONFIG_VALUE(GradRightStart, UnityEngine::Color, "Grad R Start", UnityEngine::Color(0.3f, 0.15f, 0.9f, 1.0f));
+    CONFIG_VALUE(GradRightEnd, UnityEngine::Color, "Grad R End", UnityEngine::Color(0.45f, 0.85f, 1.0f, 1.0f));
     CONFIG_VALUE(RainbowSpeed, float, "Rainbow Speed", 0.35f, "Hue cycles per second");
     CONFIG_VALUE(RainbowSaturation, float, "Rainbow Sat", 0.9f);
     CONFIG_VALUE(RainbowOffset, float, "Rainbow Offset", 0.5f, "Hue offset between left and right saber");
@@ -41,17 +51,18 @@ DECLARE_CONFIG(Config) {
     // Layers: (prefix, label, enabled, length, detail, start, end, opacity, fade, white, softness, colorSource, tint rgba)
     // Defaults = the "Prism" preset: curve sheet + tip ribbon + soft aura + snap blur.
     TRAIL_LAYER(Main, "Trail", false, 0.30f, 40, 0.0f, 1.0f, 0.8f, 1.5f, 0.05f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Glow, "Aura", true, 0.16f, 24, 0.5f, 1.08f, 0.35f, 2.2f, 0.0f, 0.7f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Glow, "Aura", true, 0.14f, 24, 0.4f, 1.06f, 0.30f, 2.4f, 0.0f, 0.7f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
     TRAIL_LAYER(Blur, "Blur", true, 0.06f, 14, 0.0f, 1.0f, 0.55f, 1.4f, 0.2f, 0.8f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Curve, "Curve", true, 0.22f, 40, 0.05f, 1.0f, 0.85f, 1.3f, 0.0f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Ribbon, "Ribbon", true, 0.28f, 36, 0.955f, 1.0f, 1.0f, 0.9f, 0.4f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    CONFIG_VALUE(CurveTaper, float, "Curve Taper", 1.8f, "How strongly the curve sheet narrows toward the hilt (higher = more whip-like)");
+    TRAIL_LAYER(Curve, "Curve", true, 0.16f, 48, 0.0f, 1.0f, 0.95f, 0.15f, 0.0f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Ribbon, "Ribbon", true, 0.10f, 28, 0.965f, 1.0f, 1.0f, 0.8f, 0.5f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    CONFIG_VALUE(CurveTaper, float, "Curve Taper", 0.0f, "How strongly the curve sheet narrows toward the hilt (higher = more whip-like)");
     CONFIG_VALUE(BlurSnap, bool, "Blur Snap", true, "Blur switches on/off instantly with speed (like ReeSabers) instead of fading");
     CONFIG_VALUE(BlurSpread, float, "Blur Spread", 0.35f, "How much of the blur extends ahead of the saber (0 = trailing only, higher = blurs the saber itself)");
     CONFIG_VALUE(BlurMinSpeed, float, "Blur Min Speed", 3.0f, "Tip speed (m/s) where blur switches on");
     CONFIG_VALUE(BlurFullSpeed, float, "Blur Full Speed", 9.0f, "Tip speed (m/s) where blur reaches full length");
 
     // Saber model
+    CONFIG_VALUE(SaberModel, int, "Saber Model", 1, "0 = game saber, 1 = Prysm saber (black handle, simple thin blade)");
     CONFIG_VALUE(PositionOffset, UnityEngine::Vector3, "Pos Offset (cm)", UnityEngine::Vector3(0, 0, 0));
     CONFIG_VALUE(RotationOffset, UnityEngine::Vector3, "Rot Offset (deg)", UnityEngine::Vector3(0, 0, 0));
     CONFIG_VALUE(LengthScale, float, "Blade Length", 1.0f, "Visual only, hitboxes are unchanged");
@@ -71,5 +82,5 @@ DECLARE_CONFIG(Config) {
 
 namespace PrysmSabers {
     void ApplyPreset(int preset);
-    inline std::vector<std::string> const PresetNames = {"Prysm (default)", "Neon", "Silk", "Inferno", "Vanilla+", "Laser", "Whip", "Potato (max FPS)"};
+    inline std::vector<std::string> const PresetNames = {"Prysm (default)", "Neon", "Silk", "Inferno", "Vanilla+", "Laser", "Whip", "Prysm Low (max FPS)"};
 }

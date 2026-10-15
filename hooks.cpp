@@ -42,7 +42,9 @@ MAKE_HOOK_MATCH(
     auto t = self->get_transform();
     auto pos = c.PositionOffset.GetValue();
     auto rot = c.RotationOffset.GetValue();
-    float thick = c.ThicknessScale.GetValue(), length = c.LengthScale.GetValue();
+    bool prysmModel = c.SaberModel.GetValue() == 1;
+    // the Prysm model builds its own blade width, so the game model is not thinned in that case
+    float thick = prysmModel ? 1.0f : c.ThicknessScale.GetValue(), length = c.LengthScale.GetValue();
     auto lp = t->get_localPosition();
     t->set_localPosition(Vector3(lp.x + pos.x / 100.0f, lp.y + pos.y / 100.0f, lp.z + pos.z / 100.0f));
     t->set_localRotation(Quaternion::op_Multiply(t->get_localRotation(), Quaternion::Euler(rot.x, rot.y, rot.z)));
@@ -75,6 +77,8 @@ MAKE_HOOK_MATCH(
     PrysmSabers::CacheTrailMaterial(material, layer);
     auto prism = self->get_gameObject()->AddComponent<PrysmSabers::PrismTrail*>();
     prism->Setup(saber, self, material, layer);
+    if (prysmModel)
+        PrysmSabers::ApplyCustomModel(self, saber, prism);
 
     // Only hide the vanilla trail once ours exists.
     if (trail && c.HideVanillaTrail.GetValue()) {

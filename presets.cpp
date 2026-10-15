@@ -15,7 +15,8 @@ namespace PrysmSabers {
             Layer main, glow, blur, curve, ribbon;
             float taper;
             bool blurSnap;
-            int saberMode, cutMode;
+            float blurMin, blurSpread;
+            int saberMode, cutMode, model;
             float sparkles, thickness, glowIntensity, rainbowSpeed;
         };
 
@@ -36,8 +37,11 @@ namespace PrysmSabers {
             SET_LAYER(Ribbon, p.ribbon);
             c.CurveTaper.SetValue(p.taper, false);
             c.BlurSnap.SetValue(p.blurSnap, false);
+            c.BlurMinSpeed.SetValue(p.blurMin, false);
+            c.BlurSpread.SetValue(p.blurSpread, false);
             c.SaberColorMode.SetValue(p.saberMode, false);
             c.CutColorMode.SetValue(p.cutMode, false);
+            c.SaberModel.SetValue(p.model, false);
             c.CutSparkles.SetValue(p.sparkles, false);
             c.ThicknessScale.SetValue(p.thickness, false);
             c.GlowIntensity.SetValue(p.glowIntensity, false);
@@ -49,69 +53,78 @@ namespace PrysmSabers {
         auto& c = getConfig();
         using UnityEngine::Color;
         Color white(1, 1, 1, 1);
-        Layer off{false, 0.2f, 16, 0.0f, 1.0f, 0.5f, 1.5f, 0.0f, 0.0f, SaberColor, white};
+        Layer off{false, 0.1f, 16, 0.0f, 1.0f, 0.5f, 1.0f, 0.0f, 0.0f, SaberColor, white};
         c.PerformanceMode.SetValue(false, false);
         c.HideVanillaTrail.SetValue(true, false);
         c.BurnSparkles.SetValue(true, false);
         c.CutExplosion.SetValue(1.0f, false);
+        // fire gradient palette (only used by layers set to "Gradient")
+        c.GradLeftStart.SetValue(Color(1.0f, 0.08f, 0.0f, 1.0f), false);
+        c.GradLeftEnd.SetValue(Color(1.0f, 0.6f, 0.05f, 1.0f), false);
+        c.GradRightStart.SetValue(Color(0.28f, 0.12f, 0.95f, 1.0f), false);
+        c.GradRightEnd.SetValue(Color(0.5f, 0.88f, 1.0f, 1.0f), false);
 
         //            en    dur    gran base   tip    op    fade  white soft  source          tint
         switch (preset) {
             default:
-            case 0:  // Prysm: balanced. Curve sheet + tip ribbon + soft aura + snap blur
+            case 0:  // Prysm: sleek. Sharp opaque curve sheet, short tip ribbon, soft aura, snap blur
                 Apply({off,
-                       {true, 0.16f, 24, 0.5f, 1.08f, 0.35f, 2.2f, 0.0f, 0.7f, SaberColor, white},
-                       {true, 0.06f, 14, 0.0f, 1.0f, 0.55f, 1.4f, 0.2f, 0.8f, SaberColor, white},
-                       {true, 0.22f, 40, 0.05f, 1.0f, 0.85f, 1.3f, 0.0f, 0.0f, SaberColor, white},
-                       {true, 0.28f, 36, 0.955f, 1.0f, 1.0f, 0.9f, 0.4f, 0.0f, SaberColor, white},
-                       1.8f, true, 0, 0, 1.0f, 0.65f, 1.0f, 0.35f});
+                       {true, 0.14f, 24, 0.4f, 1.06f, 0.30f, 2.4f, 0.0f, 0.7f, SaberColor, white},
+                       {true, 0.07f, 16, 0.0f, 1.0f, 0.6f, 1.3f, 0.25f, 0.85f, SaberColor, white},
+                       {true, 0.16f, 48, 0.0f, 1.0f, 0.92f, 0.2f, 0.0f, 0.0f, SaberColor, white},
+                       {true, 0.10f, 28, 0.965f, 1.0f, 1.0f, 0.8f, 0.5f, 0.0f, SaberColor, white},
+                       0.0f, true, 3.0f, 0.35f, 0, 0, 1, 1.0f, 0.8f, 0.9f, 0.35f});
                 break;
             case 1:  // Neon: rainbow everywhere, as loud as it gets
                 Apply({{true, 0.30f, 48, 0.0f, 1.0f, 0.75f, 1.1f, 0.05f, 0.3f, Rainbow, white},
                        {true, 0.40f, 32, 0.0f, 1.15f, 0.55f, 2.5f, 0.0f, 0.8f, Rainbow, white},
                        {true, 0.08f, 16, 0.0f, 1.0f, 0.7f, 1.0f, 0.3f, 0.8f, Rainbow, white},
                        off,
-                       {true, 0.45f, 48, 0.9f, 1.0f, 1.0f, 0.7f, 0.3f, 0.0f, Rainbow, white},
-                       1.8f, true, 2, 2, 2.0f, 0.75f, 1.6f, 0.7f});
+                       {true, 0.20f, 48, 0.9f, 1.0f, 1.0f, 0.7f, 0.3f, 0.0f, Rainbow, white},
+                       0.0f, true, 3.0f, 0.35f, 2, 2, 1, 2.0f, 0.9f, 1.6f, 0.7f});
                 break;
-            case 2:  // Silk: long, bright, flowing ribbons (made much more visible than before)
+            case 2:  // Silk: very smooth, long, flowing, clearly visible
                 Apply({off,
-                       {true, 0.22f, 20, 0.4f, 1.1f, 0.3f, 2.0f, 0.0f, 0.8f, SaberColor, white},
+                       {true, 0.30f, 40, 0.3f, 1.1f, 0.35f, 1.6f, 0.0f, 0.9f, SaberColor, white},
                        off,
-                       {true, 0.60f, 64, 0.1f, 1.0f, 0.9f, 0.7f, 0.1f, 0.0f, SaberToCustom, {1.0f, 1.0f, 1.0f, 1}},
-                       {true, 0.65f, 64, 0.955f, 1.0f, 1.0f, 0.8f, 0.5f, 0.0f, SaberColor, white},
-                       1.2f, true, 0, 0, 0.6f, 0.55f, 1.0f, 0.35f});
+                       {true, 0.55f, 96, 0.0f, 1.0f, 0.8f, 0.7f, 0.1f, 0.0f, SaberToCustom, {1.0f, 1.0f, 1.0f, 1}},
+                       {true, 0.45f, 96, 0.96f, 1.0f, 1.0f, 0.8f, 0.5f, 0.0f, SaberColor, white},
+                       0.6f, true, 3.0f, 0.35f, 0, 0, 1, 0.6f, 0.8f, 1.0f, 0.35f});
                 break;
-            case 3:  // Inferno: fire colours, hot tip, lots of sparks
-                Apply({{true, 0.28f, 40, 0.0f, 1.0f, 0.9f, 1.3f, 0.15f, 0.2f, SaberToCustom, {1.0f, 0.35f, 0.0f, 1}},
-                       {true, 0.24f, 28, 0.3f, 1.2f, 0.6f, 2.0f, 0.1f, 0.8f, CustomColor, {1.0f, 0.75f, 0.1f, 1}},
-                       {true, 0.07f, 14, 0.0f, 1.0f, 0.6f, 1.2f, 0.3f, 0.8f, SaberColor, white},
-                       {true, 0.20f, 32, 0.1f, 1.0f, 0.6f, 1.8f, 0.0f, 0.0f, CustomColor, {1.0f, 0.3f, 0.0f, 1}},
-                       {true, 0.30f, 36, 0.95f, 1.0f, 1.0f, 0.9f, 0.6f, 0.0f, CustomColor, {1.0f, 0.9f, 0.4f, 1}},
-                       2.5f, true, 0, 0, 2.0f, 0.65f, 1.3f, 0.35f});
+            case 3:  // Inferno: flames. Red saber red->orange, blue saber deep violet-blue->light blue
+                Apply({{true, 0.24f, 56, 0.0f, 1.05f, 0.6f, 1.0f, 0.1f, 0.6f, GradientColor, white},
+                       {true, 0.32f, 32, 0.25f, 1.2f, 0.5f, 1.6f, 0.0f, 0.9f, GradientColor, white},
+                       {true, 0.07f, 16, 0.0f, 1.0f, 0.55f, 1.2f, 0.3f, 0.85f, GradientColor, white},
+                       {true, 0.28f, 64, 0.0f, 1.0f, 0.9f, 0.45f, 0.0f, 0.0f, GradientColor, white},
+                       {true, 0.14f, 32, 0.95f, 1.0f, 1.0f, 0.7f, 0.6f, 0.0f, GradientColor, white},
+                       0.0f, true, 3.0f, 0.35f, 1, 0, 1, 2.0f, 0.9f, 1.4f, 0.35f});
+                // blade colours match the flames
+                c.LeftColor.SetValue(Color(1.0f, 0.12f, 0.0f, 1.0f), false);
+                c.RightColor.SetValue(Color(0.35f, 0.25f, 1.0f, 1.0f), false);
                 break;
-            case 4:  // Vanilla+: stock look, all about the motion blur
+            case 4:  // Vanilla+: game saber, stock look, all about the motion blur
                 Apply({{true, 0.16f, 28, 0.0f, 1.0f, 0.6f, 1.5f, 0.1f, 0.2f, SaberColor, white},
                        off,
                        {true, 0.13f, 24, 0.0f, 1.0f, 0.9f, 0.9f, 0.25f, 0.9f, SaberColor, white},
                        off, off,
-                       1.8f, true, 0, 0, 1.0f, 0.8f, 1.0f, 0.35f});
+                       0.0f, true, 2.5f, 0.5f, 0, 0, 0, 1.0f, 0.8f, 1.0f, 0.35f});
                 break;
-            case 5:  // Laser: just the thin tip ribbon, like a laser pointer
+            case 5:  // Laser: a razor-thin bright line at the tip, like a laser pointer
                 Apply({off, off, off, off,
-                       {true, 0.50f, 56, 0.93f, 1.0f, 1.0f, 0.6f, 0.35f, 0.0f, SaberColor, white},
-                       1.8f, true, 0, 0, 0.8f, 0.5f, 1.0f, 0.35f});
+                       {true, 0.35f, 64, 0.985f, 1.0f, 1.0f, 0.5f, 0.6f, 0.0f, SaberColor, white},
+                       0.0f, true, 3.0f, 0.35f, 0, 0, 1, 0.8f, 0.5f, 0.7f, 0.35f});
                 break;
-            case 6:  // Whip: the saber seems to bend with speed (curve sheet)
-                Apply({off, off, off,
-                       {true, 0.35f, 56, 0.0f, 1.0f, 0.95f, 0.5f, 0.0f, 0.0f, SaberColor, white},
-                       {true, 0.20f, 32, 0.96f, 1.0f, 1.0f, 1.0f, 0.5f, 0.0f, SaberColor, white},
-                       2.2f, true, 0, 0, 1.0f, 0.6f, 1.0f, 0.35f});
+            case 6:  // Whip: tapered, snappy sheet that cracks at the tip
+                Apply({off, off,
+                       {true, 0.05f, 12, 0.0f, 1.0f, 0.5f, 1.0f, 0.5f, 0.8f, SaberColor, white},
+                       {true, 0.30f, 56, 0.0f, 1.0f, 0.95f, 0.6f, 0.0f, 0.0f, SaberColor, white},
+                       {true, 0.18f, 32, 0.94f, 1.0f, 1.0f, 1.0f, 0.5f, 0.0f, SaberColor, white},
+                       2.2f, true, 5.0f, 0.2f, 0, 0, 1, 1.0f, 0.8f, 0.9f, 0.35f});
                 break;
-            case 7:  // Potato: maximum FPS
+            case 7:  // Prysm Low: maximum FPS
                 Apply({{true, 0.15f, 10, 0.0f, 1.0f, 0.8f, 1.0f, 0.05f, 0.0f, SaberColor, white},
                        off, off, off, off,
-                       1.8f, false, 0, 0, 0.5f, 0.65f, 1.0f, 0.35f});
+                       0.0f, false, 3.0f, 0.35f, 0, 0, 1, 0.5f, 0.8f, 0.6f, 0.35f});
                 c.PerformanceMode.SetValue(true, false);
                 c.BurnSparkles.SetValue(false, false);
                 c.CutExplosion.SetValue(0.5f, false);
