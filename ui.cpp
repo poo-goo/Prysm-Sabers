@@ -97,7 +97,7 @@ namespace PrysmSabers {
                         bool on = !getConfig().PreviewEnabled.GetValue();
                         getConfig().PreviewEnabled.SetValue(on);
                         if (on)
-                            ShowPreview(h.ptr());
+                            ShowPreview(const_cast<Transform*>(h.ptr()));
                         else
                             HidePreview();
                         Rebuild(h);
