@@ -1,7 +1,7 @@
 name: Build
 
 env:
-  module_id: prism-sabers
+  module_id: prysm-sabers
 
 on:
   workflow_dispatch:
@@ -12,6 +12,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         name: Checkout
@@ -25,7 +26,7 @@ jobs:
           workflow_token: ${{ secrets.GITHUB_TOKEN }}
           restore: true
           resolve_ndk: true
-          cache: false
+          cache: true
 
       - name: Build and create QMOD
         run: |
@@ -45,4 +46,3 @@ jobs:
           name: ${{ steps.names.outputs.QMOD }}
           path: ./${{ steps.names.outputs.QMOD }}
           if-no-files-found: error
-
