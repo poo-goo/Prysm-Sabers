@@ -286,7 +286,7 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
     int gran = std::clamp(cfg.granularity, 2, perf ? 12 : 96);
     float soft = perf ? 0.0f : std::clamp(cfg.soft, 0.0f, 1.0f);
     int cross = (isCurve || soft > 0.01f) ? SoftCross : 2;
-    layer->Resize(gran, cross, c.FlipTrailV.GetValue(), false);
+    layer->Resize(gran, cross, c.FlipTrailV.GetValue(), !c.TrailTextureFade.GetValue());
     layer->SetVisible(true);
 
     Color base = BaseColor(now);
@@ -297,7 +297,7 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
 
     // Positions across the blade (fraction of blade length) and their opacity weights.
     float span = std::max(cfg.tip - cfg.base, 0.1f);
-    float f = soft * span * 0.4f;
+    float f = soft * span * 0.3f;
     float tpos[SoftCross], wgt[SoftCross];
     if (isCurve) {
         // "Curve": a sheet that is solid at the tip and fades toward the hilt, so the blade looks like it bends with speed
@@ -312,17 +312,19 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
         tpos[1] = cfg.tip;
         wgt[0] = wgt[1] = 1.0f;
     } else {
-        // 3 feather vertices outside each end of the blade, fading smoothly to 0 (no hard edges)
+        // 3 feather vertices at each end, all inside [start, end]: the edges fade out smoothly and
+        // nothing extends past the hilt side or past the tip of the blade
         static constexpr float fo[3] = {1.0f, 0.66f, 0.33f};
         static constexpr float fw[3] = {0.0f, 0.268f, 0.745f};  // smoothstep falloff
+        float lo = cfg.base + f, hi = cfg.tip - f;
         for (int k = 0; k < 3; k++) {
-            tpos[k] = cfg.base - f * fo[k];
+            tpos[k] = lo - f * fo[k];
             wgt[k] = fw[k];
-            tpos[7 - k] = cfg.tip + f * fo[k];
+            tpos[7 - k] = hi + f * fo[k];
             wgt[7 - k] = fw[k];
         }
-        tpos[3] = cfg.base;
-        tpos[4] = cfg.tip;
+        tpos[3] = lo;
+        tpos[4] = hi;
         wgt[3] = wgt[4] = 1.0f;
     }
 
@@ -332,6 +334,7 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
     // and both sides fade smoothly. That makes it read as the saber itself being smeared, not as a trail.
     float spread = isBlur ? std::clamp(c.BlurSpread.GetValue(), 0.0f, 0.8f) : 0.0f;
     float lead = duration * spread;
+    float fadeExp = std::clamp(cfg.fade, 0.0f, 1.0f) * 4.0f;  // 0 = no fade at all, 1 = very strong fade
     float window = duration + lead;
     for (int i = 0; i <= gran; i++) {
         float u = (float) i / gran;
@@ -358,11 +361,11 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
             float hot = std::abs(dist) / duration;  // white-hot core right at the blade
             if (cfg.white > 0.0f && hot < cfg.white)
                 col = Lerp(col, Color(1, 1, 1, 1), 1.0f - hot / cfg.white);
-            a = std::clamp(cfg.opacity * alphaScale * std::pow(w, std::max(cfg.fade, 0.05f)), 0.0f, 1.0f);
+            a = std::clamp(cfg.opacity * alphaScale * std::pow(w, fadeExp), 0.0f, 1.0f);
         } else {
             if (cfg.white > 0.0f && u < cfg.white)
                 col = Lerp(col, Color(1, 1, 1, 1), 1.0f - u / cfg.white);
-            a = std::clamp(cfg.opacity * alphaScale * std::pow(1.0f - u, std::max(cfg.fade, 0.05f)), 0.0f, 1.0f);
+            a = std::clamp(cfg.opacity * alphaScale * std::pow(1.0f - u, fadeExp), 0.0f, 1.0f);
         }
 
         for (int j = 0; j < cross; j++) {
@@ -606,19 +609,24 @@ namespace PrysmSabers {
         auto material = FindTrailMaterial();
         if (!material)
             return;
-        // fixed position next to the menu panel (the offsets are applied live from the settings)
+        // fixed position next to the menu panel; axes come from the camera so "left" is really your left
         Vector3 origin{0, 1.6f, 3.0f}, right{1, 0, 0}, fwd{0, 0, 1};
-        if (anchor) {
+        auto cam = Camera::get_main();
+        Vector3 camPos = cam ? cam->get_transform()->get_position() : Vector3{0, 1.6f, 0};
+        if (anchor)
             origin = anchor->get_position();
-            right = Norm(anchor->get_right());
-            fwd = Norm(anchor->get_forward());
-        } else if (auto cam = Camera::get_main()) {
-            auto t = cam->get_transform();
-            fwd = t->get_forward();
-            fwd.y = 0;
-            fwd = Norm(fwd);
-            origin = Add(t->get_position(), Mul(fwd, 3.0f));
-            right = Norm(Cross(Vector3{0, 1, 0}, fwd));
+        else if (cam) {
+            auto f = cam->get_transform()->get_forward();
+            f.y = 0;
+            origin = Add(camPos, Mul(Norm(f), 3.0f));
+        }
+        if (cam || anchor) {
+            Vector3 toCam = Sub(camPos, origin);
+            toCam.y = 0;
+            if (Len(toCam) > 0.01f) {
+                fwd = Norm(Mul(toCam, -1.0f));  // from the menu away from you
+                right = Norm(Cross(Vector3{0, 1, 0}, fwd));  // your right
+            }
         }
         auto solid = SolidMaterial();
         for (int i = 0; i < 2; i++) {

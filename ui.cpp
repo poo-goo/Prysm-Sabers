@@ -51,7 +51,7 @@ namespace PrysmSabers {
     AddConfigValueIncrementInt(parent, c.p##Granularity, 2, 2, 96);              \
     AddConfigValueSliderIncrement(parent, c.p##BaseOffset, 0.01f, 0.0f, 1.0f);   \
     AddConfigValueSliderIncrement(parent, c.p##TipOffset, 0.01f, 0.0f, 1.5f);    \
-    AddConfigValueSliderIncrement(parent, c.p##Fade, 0.05f, 0.0f, 6.0f);          \
+    AddConfigValueSliderIncrement(parent, c.p##Fade, 0.05f, 0.0f, 1.0f);          \
     AddConfigValueSliderIncrement(parent, c.p##WhiteHead, 0.01f, 0.0f, 1.0f);
 
 #define LAYER_SOFT(p) AddConfigValueSliderIncrement(parent, c.p##Softness, 0.05f, 0.0f, 1.0f);
@@ -110,6 +110,7 @@ namespace PrysmSabers {
                     AddConfigValueSliderIncrement(parent, c.PreviewY, 0.1f, -3.0f, 3.0f);
                     AddConfigValueSliderIncrement(parent, c.PreviewZ, 0.1f, -3.0f, 3.0f);
                     AddConfigValueToggle(parent, c.FlipTrailV);
+                    AddConfigValueToggle(parent, c.TrailTextureFade);
                     Header(parent, "Presets");
                     for (int i = 0; i < (int) PresetNames.size(); i++) {
                         BSML::Lite::CreateUIButton(parent, PresetNames[i], [i, h]() {

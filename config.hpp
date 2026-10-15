@@ -18,7 +18,7 @@ namespace PrysmSabers {
     CONFIG_VALUE(p##BaseOffset, float, label " Start", base, "Where the layer starts along the blade (0 = hilt, 1 = tip)");   \
     CONFIG_VALUE(p##TipOffset, float, label " End", tip, "Where the layer ends along the blade (1 = tip, >1 = past it)");      \
     CONFIG_VALUE(p##Opacity, float, label " Opacity", op);                                                                    \
-    CONFIG_VALUE(p##Fade, float, label " Fade", fade, "Falloff exponent. 1 = linear, higher = faster fade");                  \
+    CONFIG_VALUE(p##Fade, float, label " Fade", fade, "0 = no fade at all, 1 = very strongly faded");                  \
     CONFIG_VALUE(p##WhiteHead, float, label " White", white, "Fraction near the blade that blends to white-hot");              \
     CONFIG_VALUE(p##Softness, float, label " Soft", soft, "Feathers the edges of the layer. 0 = hard edge, 1 = very soft");    \
     CONFIG_VALUE(p##ColorSource, int, label " Color", src);                                                                   \
@@ -28,6 +28,7 @@ DECLARE_CONFIG(Config) {
     CONFIG_VALUE(Enabled, bool, "Enable Prysm Sabers", true);
     CONFIG_VALUE(HideVanillaTrail, bool, "Hide Vanilla Trail", true, "Replace the stock trail with Prysm Sabers layers");
     CONFIG_VALUE(PreviewEnabled, bool, "Live Preview", true, "Show two swinging preview sabers in front of you while the Prysm menu is open");
+    CONFIG_VALUE(TrailTextureFade, bool, "Texture Fade", false, "Use the game trail texture's own fade along the trail (off = Fade sliders are exact)");
     CONFIG_VALUE(FlipTrailV, bool, "Flip Trail Tex", true, "Flips the trail texture across the blade. Turn off if trails look upside down");
     CONFIG_VALUE(PreviewX, float, "Preview Left/Right", -1.5f, "Meters, relative to the menu panel (negative = left)");
     CONFIG_VALUE(PreviewY, float, "Preview Height", -0.7f, "Meters, relative to the menu panel");
@@ -50,11 +51,11 @@ DECLARE_CONFIG(Config) {
 
     // Layers: (prefix, label, enabled, length, detail, start, end, opacity, fade, white, softness, colorSource, tint rgba)
     // Defaults = the "Prism" preset: curve sheet + tip ribbon + soft aura + snap blur.
-    TRAIL_LAYER(Main, "Trail", false, 0.30f, 40, 0.0f, 1.0f, 0.8f, 1.5f, 0.05f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Glow, "Aura", true, 0.14f, 24, 0.4f, 1.06f, 0.30f, 2.4f, 0.0f, 0.7f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Blur, "Blur", true, 0.06f, 14, 0.0f, 1.0f, 0.55f, 1.4f, 0.2f, 0.8f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Curve, "Curve", true, 0.16f, 48, 0.0f, 1.0f, 0.95f, 0.15f, 0.0f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Ribbon, "Ribbon", true, 0.10f, 28, 0.965f, 1.0f, 1.0f, 0.8f, 0.5f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Main, "Trail", false, 0.18f, 40, 0.0f, 1.0f, 0.8f, 0.35f, 0.05f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Glow, "Aura", true, 0.09f, 24, 0.4f, 1.06f, 0.30f, 0.6f, 0.0f, 0.7f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Blur, "Blur", true, 0.035f, 14, 0.0f, 1.0f, 0.55f, 0.3f, 0.2f, 0.8f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Curve, "Curve", true, 0.11f, 48, 0.0f, 1.0f, 0.95f, 0.0f, 0.0f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Ribbon, "Ribbon", true, 0.07f, 28, 0.965f, 1.0f, 1.0f, 0.2f, 0.5f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
     CONFIG_VALUE(CurveTaper, float, "Curve Taper", 0.0f, "How strongly the curve sheet narrows toward the hilt (higher = more whip-like)");
     CONFIG_VALUE(BlurSnap, bool, "Blur Snap", true, "Blur switches on/off instantly with speed (like ReeSabers) instead of fading");
     CONFIG_VALUE(BlurSpread, float, "Blur Spread", 0.35f, "How much of the blur extends ahead of the saber (0 = trailing only, higher = blurs the saber itself)");
