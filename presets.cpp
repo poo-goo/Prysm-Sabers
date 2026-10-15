@@ -18,6 +18,7 @@ namespace PrysmSabers {
             float blurMin, blurSpread;
             int saberMode, cutMode, model;
             float sparkles, thickness, glowIntensity, rainbowSpeed;
+            bool bladeGradient = false;
         };
 
         // clang-format off
@@ -35,6 +36,13 @@ namespace PrysmSabers {
             SET_LAYER(Blur, p.blur);
             SET_LAYER(Curve, p.curve);
             SET_LAYER(Ribbon, p.ribbon);
+            // flat opaque layers for the sheet-like ones, the game's glowing material for the soft glow layers
+            c.MainSolid.SetValue(true, false);
+            c.CurveSolid.SetValue(true, false);
+            c.RibbonSolid.SetValue(true, false);
+            c.GlowSolid.SetValue(false, false);
+            c.BlurSolid.SetValue(false, false);
+            c.BladeGradient.SetValue(p.bladeGradient, false);
             c.CurveTaper.SetValue(p.taper, false);
             c.BlurSnap.SetValue(p.blurSnap, false);
             c.BlurMinSpeed.SetValue(p.blurMin, false);
@@ -98,7 +106,7 @@ namespace PrysmSabers {
                        {true, 0.04f, 16, 0.0f, 1.0f, 0.55f, 0.3f, 0.3f, 0.85f, GradientColor, white},
                        {true, 0.18f, 64, 0.0f, 1.0f, 0.9f, 0.1f, 0.0f, 0.0f, GradientColor, white},
                        {true, 0.10f, 32, 0.95f, 1.0f, 1.0f, 0.2f, 0.6f, 0.0f, GradientColor, white},
-                       0.0f, true, 3.0f, 0.35f, 1, 0, 1, 2.0f, 0.9f, 1.4f, 0.35f});
+                       0.0f, true, 3.0f, 0.35f, 1, 0, 1, 2.0f, 0.9f, 1.4f, 0.35f, true});
                 // blade colours match the flames
                 c.LeftColor.SetValue(Color(1.0f, 0.12f, 0.0f, 1.0f), false);
                 c.RightColor.SetValue(Color(0.35f, 0.25f, 1.0f, 1.0f), false);

@@ -11,7 +11,7 @@ namespace PrysmSabers {
 }
 
 // Labels are kept SHORT on purpose: long labels overflow the BSML row and overlap the control.
-#define TRAIL_LAYER(p, label, en, dur, gran, base, tip, op, fade, white, soft, src, ...)                                       \
+#define TRAIL_LAYER(p, label, en, dur, gran, base, tip, op, fade, white, soft, solid, src, ...)                                       \
     CONFIG_VALUE(p##Enabled, bool, label " On", en);                                                                          \
     CONFIG_VALUE(p##Duration, float, label " Length", dur, "How long the layer persists behind the blade (seconds)");          \
     CONFIG_VALUE(p##Granularity, int, label " Detail", gran, "Spline segments. Higher = smoother, slightly more GPU work");    \
@@ -21,6 +21,7 @@ namespace PrysmSabers {
     CONFIG_VALUE(p##Fade, float, label " Fade", fade, "0 = no fade at all, 1 = very strongly faded");                  \
     CONFIG_VALUE(p##WhiteHead, float, label " White", white, "Fraction near the blade that blends to white-hot");              \
     CONFIG_VALUE(p##Softness, float, label " Soft", soft, "Feathers the edges of the layer. 0 = hard edge, 1 = very soft");    \
+    CONFIG_VALUE(p##Solid, bool, label " Solid", solid, "Solid = flat opaque colour (no game texture), exactly what the sliders say. Off = the game's glowing trail material");   \
     CONFIG_VALUE(p##ColorSource, int, label " Color", src);                                                                   \
     CONFIG_VALUE(p##CustomColor, UnityEngine::Color, label " Tint", UnityEngine::Color(__VA_ARGS__));
 
@@ -30,9 +31,11 @@ DECLARE_CONFIG(Config) {
     CONFIG_VALUE(PreviewEnabled, bool, "Live Preview", true, "Show two swinging preview sabers in front of you while the Prysm menu is open");
     CONFIG_VALUE(TrailTextureFade, bool, "Texture Fade", false, "Use the game trail texture's own fade along the trail (off = Fade sliders are exact)");
     CONFIG_VALUE(FlipTrailV, bool, "Flip Trail Tex", true, "Flips the trail texture across the blade. Turn off if trails look upside down");
-    CONFIG_VALUE(PreviewX, float, "Preview Left/Right", -1.5f, "Meters, relative to the menu panel (negative = left)");
-    CONFIG_VALUE(PreviewY, float, "Preview Height", -0.7f, "Meters, relative to the menu panel");
-    CONFIG_VALUE(PreviewZ, float, "Preview Depth", -0.35f, "Meters toward you (negative) or away from you (positive)");
+    CONFIG_VALUE(PreviewX, float, "Preview Left/Right", -1.5f, "Meters from your head when the tab opens (negative = left)");
+    CONFIG_VALUE(PreviewY, float, "Preview Height", -0.9f, "Meters relative to your head (negative = lower)");
+    CONFIG_VALUE(PreviewZ, float, "Preview Depth", 1.4f, "Meters in front of you (the menu is further away than this)");
+    CONFIG_VALUE(ConfigVersion, int, "Config Version", 0);
+    CONFIG_VALUE(PreviewScale, float, "Preview Size", 1.0f, "Scale of the menu preview sabers");
     CONFIG_VALUE(PerformanceMode, bool, "Performance Mode", false, "Caps detail at 12, disables blur and softness");
 
     // Saber colors
@@ -51,11 +54,11 @@ DECLARE_CONFIG(Config) {
 
     // Layers: (prefix, label, enabled, length, detail, start, end, opacity, fade, white, softness, colorSource, tint rgba)
     // Defaults = the "Prism" preset: curve sheet + tip ribbon + soft aura + snap blur.
-    TRAIL_LAYER(Main, "Trail", false, 0.18f, 40, 0.0f, 1.0f, 0.8f, 0.35f, 0.05f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Glow, "Aura", true, 0.09f, 24, 0.4f, 1.06f, 0.30f, 0.6f, 0.0f, 0.7f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Blur, "Blur", true, 0.035f, 14, 0.0f, 1.0f, 0.55f, 0.3f, 0.2f, 0.8f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Curve, "Curve", true, 0.11f, 48, 0.0f, 1.0f, 0.95f, 0.0f, 0.0f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Ribbon, "Ribbon", true, 0.07f, 28, 0.965f, 1.0f, 1.0f, 0.2f, 0.5f, 0.0f, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Main, "Trail", false, 0.18f, 40, 0.0f, 1.0f, 0.8f, 0.35f, 0.05f, 0.0f, true, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Glow, "Aura", true, 0.09f, 24, 0.4f, 1.06f, 0.30f, 0.6f, 0.0f, 0.7f, false, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Blur, "Blur", true, 0.035f, 14, 0.0f, 1.0f, 0.55f, 0.3f, 0.2f, 0.8f, false, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Curve, "Curve", true, 0.11f, 48, 0.0f, 1.0f, 0.95f, 0.0f, 0.0f, 0.0f, true, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Ribbon, "Ribbon", true, 0.07f, 28, 0.965f, 1.0f, 1.0f, 0.2f, 0.5f, 0.0f, true, 0, 1.0f, 1.0f, 1.0f, 1.0f)
     CONFIG_VALUE(CurveTaper, float, "Curve Taper", 0.0f, "How strongly the curve sheet narrows toward the hilt (higher = more whip-like)");
     CONFIG_VALUE(BlurSnap, bool, "Blur Snap", true, "Blur switches on/off instantly with speed (like ReeSabers) instead of fading");
     CONFIG_VALUE(BlurSpread, float, "Blur Spread", 0.35f, "How much of the blur extends ahead of the saber (0 = trailing only, higher = blurs the saber itself)");
@@ -63,6 +66,7 @@ DECLARE_CONFIG(Config) {
     CONFIG_VALUE(BlurFullSpeed, float, "Blur Full Speed", 9.0f, "Tip speed (m/s) where blur reaches full length");
 
     // Saber model
+    CONFIG_VALUE(BladeGradient, bool, "Blade Gradient", false, "Prysm saber blade fades from the Grad Start to the Grad End colour (hilt to tip)");
     CONFIG_VALUE(SaberModel, int, "Saber Model", 1, "0 = game saber, 1 = Prysm saber (black handle, simple thin blade)");
     CONFIG_VALUE(PositionOffset, UnityEngine::Vector3, "Pos Offset (cm)", UnityEngine::Vector3(0, 0, 0));
     CONFIG_VALUE(RotationOffset, UnityEngine::Vector3, "Rot Offset (deg)", UnityEngine::Vector3(0, 0, 0));
@@ -75,7 +79,11 @@ DECLARE_CONFIG(Config) {
     CONFIG_VALUE(CutLifetime, float, "Particle Life", 1.0f);
     CONFIG_VALUE(CutColorMode, int, "Particle Color", 0);
     CONFIG_VALUE(ClashEffect, bool, "Clash Effect", true);
-    CONFIG_VALUE(BurnMarks, bool, "Burn Marks", true);
+    CONFIG_VALUE(BurnMarks, bool, "Burn Marks", true, "Draws a glowing burn line on the floor where a blade touches it (the Quest game does not do this by itself)");
+    CONFIG_VALUE(BurnLife, float, "Burn Length", 0.8f, "Seconds the burn line takes to fade out");
+    CONFIG_VALUE(BurnWidth, float, "Burn Width (cm)", 5.0f);
+    CONFIG_VALUE(BurnOpacity, float, "Burn Opacity", 0.9f);
+    CONFIG_VALUE(BurnFloorOffset, float, "Burn Floor Height", 0.0f, "Meters. Raise it if marks appear below the floor, lower it if they float above it");
     CONFIG_VALUE(BurnSparkles, bool, "Burn Sparkles", true);
 };
 

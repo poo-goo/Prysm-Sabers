@@ -25,10 +25,13 @@ DECLARE_CLASS_CODEGEN(PrysmSabers, PrismTrailLayer, UnityEngine::MonoBehaviour) 
     DECLARE_INSTANCE_FIELD(int, crossCount);
     DECLARE_INSTANCE_FIELD(bool, flipV);
     DECLARE_INSTANCE_FIELD(bool, flatU);
+    DECLARE_INSTANCE_FIELD(bool, useSolid);
+    DECLARE_INSTANCE_FIELD(UnityW<UnityEngine::Material>, gameMat);
 
    public:
     void Init(UnityEngine::Material* material, int sortingOrder);
     void Resize(int granularity, int cross, bool flipV, bool flatU);
+    void SetSolid(bool solid, UnityEngine::Material* solidMaterial);
     void Upload();
     void SetVisible(bool visible);
 };
@@ -42,6 +45,7 @@ DECLARE_CLASS_CODEGEN(PrysmSabers, PrismTrail, UnityEngine::MonoBehaviour) {
     DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, curveLayer);
     DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, ribbonLayer);
     DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, bladeLayer);
+    DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, burnLayer);
     DECLARE_INSTANCE_FIELD(UnityW<UnityEngine::Material>, bladeMat);
 
     DECLARE_INSTANCE_METHOD(void, LateUpdate);
@@ -61,6 +65,7 @@ DECLARE_CLASS_CODEGEN(PrysmSabers, PrismTrail, UnityEngine::MonoBehaviour) {
     // Menu preview: no game saber, a scripted swing instead
     void SetupPreview(UnityEngine::Material* material, UnityEngine::Material* solid, int layer, bool left, UnityEngine::Vector3 origin, UnityEngine::Vector3 right, UnityEngine::Vector3 forward);
     void SetBladeMaterial(UnityEngine::Material* material) { bladeMat = material; }
+    bool IsLeft() const { return isLeft; }
 
    private:
     std::array<Sample, HistorySize> history;
@@ -78,6 +83,14 @@ DECLARE_CLASS_CODEGEN(PrysmSabers, PrismTrail, UnityEngine::MonoBehaviour) {
     bool modified;
     bool blurOn;
     bool preview;
+    static constexpr int BurnCap = 64;
+    UnityEngine::Vector3 burnPos[64];
+    float burnTime[64];
+    bool burnValid[64];
+    int burnHead;
+    int burnCount;
+    void PushBurn(UnityEngine::Vector3 pos, float time, bool valid);
+    void UpdateBurn(float now, UnityEngine::Vector3 bottom, UnityEngine::Vector3 top);
     UnityEngine::Vector3 pvOrigin;
     UnityEngine::Vector3 pvRight;
     UnityEngine::Vector3 pvForward;
@@ -100,6 +113,7 @@ namespace PrysmSabers {
     void CacheTrailMaterial(UnityEngine::Material* material, int layer);
     // Replaces the game saber visuals with the Prysm saber (black handle, thin simple blade)
     void ApplyCustomModel(GlobalNamespace::SaberModelController* model, GlobalNamespace::Saber* saber, PrismTrail* trail);
+    UnityEngine::Material* SolidMaterial();
     bool PreviewAvailable();
     void ShowPreview(UnityEngine::Transform* anchor);
     void HidePreview();

@@ -44,6 +44,7 @@ namespace PrysmSabers {
 
 #define LAYER_UI(p)                                                              \
     AddConfigValueToggle(parent, c.p##Enabled);                                  \
+    AddConfigValueToggle(parent, c.p##Solid);                                    \
     AddConfigValueIncrementEnum(parent, c.p##ColorSource, ColorSourceNames);     \
     AddConfigValueColorPicker(parent, c.p##CustomColor);                         \
     AddConfigValueSliderIncrement(parent, c.p##Duration, 0.005f, 0.005f, 1.5f);  \
@@ -102,10 +103,15 @@ namespace PrysmSabers {
                             HidePreview();
                         Rebuild(h);
                     });
+                    {
+                        auto status = BSML::Lite::CreateText(parent, fmt::format("Preview: {}  |  trail material: {}", PreviewVisible() ? "showing" : "hidden", PreviewAvailable() ? "found" : "missing"), TMPro::FontStyles::Normal, 3.0f);
+                        FixHeight(status->get_gameObject(), 5.0f);
+                    }
                     if (c.PreviewEnabled.GetValue() && !PreviewAvailable()) {
                         auto note = BSML::Lite::CreateText(parent, "Preview needs the game's trail material.\nPlay any song once, then reopen this tab.", TMPro::FontStyles::Normal, 3.2f);
                         FixHeight(note->get_gameObject(), 12.0f);
                     }
+                    AddConfigValueSliderIncrement(parent, c.PreviewScale, 0.1f, 0.2f, 2.0f);
                     AddConfigValueSliderIncrement(parent, c.PreviewX, 0.1f, -4.0f, 4.0f);
                     AddConfigValueSliderIncrement(parent, c.PreviewY, 0.1f, -3.0f, 3.0f);
                     AddConfigValueSliderIncrement(parent, c.PreviewZ, 0.1f, -3.0f, 3.0f);
@@ -123,6 +129,7 @@ namespace PrysmSabers {
                     AddConfigValueIncrementEnum(parent, c.SaberColorMode, SaberColorModeNames);
                     AddConfigValueColorPicker(parent, c.LeftColor);
                     AddConfigValueColorPicker(parent, c.RightColor);
+                    AddConfigValueToggle(parent, c.BladeGradient);
                     AddConfigValueColorPicker(parent, c.GradLeftStart);
                     AddConfigValueColorPicker(parent, c.GradLeftEnd);
                     AddConfigValueColorPicker(parent, c.GradRightStart);
@@ -161,6 +168,10 @@ namespace PrysmSabers {
                     AddConfigValueIncrementEnum(parent, c.CutColorMode, CutColorModeNames);
                     AddConfigValueToggle(parent, c.ClashEffect);
                     AddConfigValueToggle(parent, c.BurnMarks);
+                    AddConfigValueSliderIncrement(parent, c.BurnLife, 0.1f, 0.1f, 3.0f);
+                    AddConfigValueSliderIncrement(parent, c.BurnWidth, 0.5f, 1.0f, 20.0f);
+                    AddConfigValueSliderIncrement(parent, c.BurnOpacity, 0.05f, 0.0f, 1.0f);
+                    AddConfigValueSliderIncrement(parent, c.BurnFloorOffset, 0.01f, -0.5f, 0.5f);
                     AddConfigValueToggle(parent, c.BurnSparkles);
                     break;
             }

@@ -68,6 +68,7 @@ namespace PrysmSabers {
         float duration;
         int granularity;
         float base, tip, opacity, fade, white, soft;
+        bool solid;
         int source;
         Color custom;
     };
@@ -75,7 +76,7 @@ namespace PrysmSabers {
 #define READ_LAYER(p) \
     LayerConfig { c.p##Enabled.GetValue(), c.p##Duration.GetValue(), c.p##Granularity.GetValue(), c.p##BaseOffset.GetValue(), \
                   c.p##TipOffset.GetValue(), c.p##Opacity.GetValue(), c.p##Fade.GetValue(), c.p##WhiteHead.GetValue(), c.p##Softness.GetValue(), \
-                  c.p##ColorSource.GetValue(), c.p##CustomColor.GetValue() }
+                  c.p##Solid.GetValue(), c.p##ColorSource.GetValue(), c.p##CustomColor.GetValue() }
 
     static LayerConfig ReadLayer(int which) {
         auto& c = getConfig();
@@ -100,6 +101,8 @@ void PrismTrailLayer::Init(Material* material, int sortingOrder) {
     mesh->MarkDynamic();
     filter->set_sharedMesh(mesh);
     meshRenderer->set_sharedMaterial(material);
+    gameMat = material;
+    useSolid = false;
     meshRenderer->set_shadowCastingMode(Rendering::ShadowCastingMode::Off);
     meshRenderer->set_receiveShadows(false);
     meshRenderer->set_sortingOrder(sortingOrder);
@@ -148,6 +151,15 @@ void PrismTrailLayer::Resize(int gran, int cross, bool flip, bool flat) {
     mesh->set_triangles(triangles);
 }
 
+void PrismTrailLayer::SetSolid(bool solid, Material* solidMaterial) {
+    if (solid && !solidMaterial)
+        solid = false;
+    if (solid == useSolid || !meshRenderer)
+        return;
+    useSolid = solid;
+    meshRenderer->set_sharedMaterial(solid ? solidMaterial : gameMat.ptr());
+}
+
 void PrismTrailLayer::Upload() {
     mesh->set_vertices(vertices);
     mesh->set_colors(colors);
@@ -190,10 +202,13 @@ void PrismTrail::InitCommon(Material* material, int layer, Material* solid) {
     modified = false;
     blurOn = false;
 
-    static constexpr char const* names[] = {"PrismMain", "PrismAura", "PrismBlur", "PrismCurve", "PrismRibbon", "PrismPreviewBlade"};
-    static constexpr int orders[] = {0, -2, 1, -1, 2, 3};
-    int total = preview ? 6 : 5;
-    for (int i = 0; i < total; i++) {
+    burnHead = 0;
+    burnCount = 0;
+    static constexpr char const* names[] = {"PrismMain", "PrismAura", "PrismBlur", "PrismCurve", "PrismRibbon", "PrismPreviewBlade", "PrismBurn"};
+    static constexpr int orders[] = {0, -2, 1, -1, 2, 3, -3};
+    for (int i = 0; i < 7; i++) {
+        if ((i == 5 && !preview) || (i == 6 && preview))
+            continue;
         auto go = GameObject::New_ctor(names[i]);
         go->set_layer(layer);
         auto l = go->AddComponent<PrismTrailLayer*>();
@@ -204,26 +219,27 @@ void PrismTrail::InitCommon(Material* material, int layer, Material* solid) {
             case 2: blurLayer = l; break;
             case 3: curveLayer = l; break;
             case 4: ribbonLayer = l; break;
-            default: bladeLayer = l; break;
+            case 5: bladeLayer = l; break;
+            default: burnLayer = l; break;
         }
     }
 }
 
 void PrismTrail::OnEnable() {
     count = 0;
-    for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer})
+    for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer, burnLayer})
         if (l)
             l->get_gameObject()->SetActive(true);
 }
 
 void PrismTrail::OnDisable() {
-    for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer})
+    for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer, burnLayer})
         if (l)
             l->get_gameObject()->SetActive(false);
 }
 
 void PrismTrail::OnDestroy() {
-    for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer})
+    for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer, burnLayer})
         if (l)
             Object::Destroy(l->get_gameObject());
 }
@@ -288,6 +304,8 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
     int cross = (isCurve || soft > 0.01f) ? SoftCross : 2;
     layer->Resize(gran, cross, c.FlipTrailV.GetValue(), !c.TrailTextureFade.GetValue());
     layer->SetVisible(true);
+    layer->SetSolid(cfg.solid, SolidMaterial());
+    bool solidMode = layer->useSolid;
 
     Color base = BaseColor(now);
     float duration = std::max(cfg.duration, 0.005f);
@@ -372,7 +390,7 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
             int idx = i * cross + j;
             verts[idx] = Add(s.bottom, Mul(blade, tpos[j]));
             float aj = a * wgt[j];
-            cols[idx] = {col.r * aj, col.g * aj, col.b * aj, aj};
+            cols[idx] = solidMode ? Color{col.r, col.g, col.b, aj} : Color{col.r * aj, col.g * aj, col.b * aj, aj};
         }
     }
     layer->Upload();
@@ -463,8 +481,11 @@ void PrismTrail::LateUpdate() {
     if (count == 0 || now > history[head].time)
         Push({bottom, top, now});
 
+    if (!preview && enabled)
+        UpdateBurn(now, bottom, top);
+
     if (!enabled) {
-        for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer})
+        for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer, burnLayer})
             if (l)
                 l->SetVisible(false);
         return;
@@ -497,6 +518,87 @@ void PrismTrail::LateUpdate() {
     }
 }
 
+
+// ---------------------------------------------------------------------------------------------
+// Floor burn marks (the Quest game does not draw these, so Prysm Sabers does)
+// ---------------------------------------------------------------------------------------------
+
+void PrismTrail::PushBurn(Vector3 pos, float time, bool valid) {
+    burnHead = (burnHead + 1) % BurnCap;
+    burnPos[burnHead] = pos;
+    burnTime[burnHead] = time;
+    burnValid[burnHead] = valid;
+    burnCount = std::min(burnCount + 1, (int) BurnCap);
+}
+
+void PrismTrail::UpdateBurn(float now, Vector3 bottom, Vector3 top) {
+    auto layer = burnLayer ? burnLayer.ptr() : nullptr;
+    if (!layer)
+        return;
+    auto& c = getConfig();
+    if (!c.BurnMarks.GetValue() || c.PerformanceMode.GetValue()) {
+        layer->SetVisible(false);
+        burnCount = 0;
+        return;
+    }
+    float floorY = c.BurnFloorOffset.GetValue();
+    float by = bottom.y - floorY, ty = top.y - floorY;
+    bool contact = (by > 0.0f && ty < 0.0f) || (by < 0.0f && ty > 0.0f);
+    bool lastValid = burnCount > 0 && burnValid[burnHead];
+    if (contact) {
+        float t = by / (by - ty);
+        Vector3 p = Add(bottom, Mul(Sub(top, bottom), t));
+        p.y = floorY + 0.012f;
+        if (!lastValid)
+            PushBurn(p, now, false);  // zero-alpha breaker, so a new touch is not joined to an old one
+        PushBurn(p, now, true);
+    } else if (lastValid) {
+        PushBurn(burnPos[burnHead], now, false);
+    }
+
+    float life = std::max(c.BurnLife.GetValue(), 0.05f);
+    if (burnCount == 0 || now - burnTime[burnHead] > life) {
+        layer->SetVisible(false);
+        return;
+    }
+
+    layer->Resize(BurnCap - 1, 2, c.FlipTrailV.GetValue(), true);
+    layer->SetVisible(true);
+    auto verts = layer->vertices;
+    auto cols = layer->colors;
+    float halfW = std::max(c.BurnWidth.GetValue(), 0.5f) * 0.005f;  // cm -> m, half width
+    float opacity = c.BurnOpacity.GetValue();
+    Color base = BaseColor(now);
+    Vector3 lateral{1, 0, 0};
+    Vector3 lastPos = burnPos[burnHead];
+    for (int k = 0; k < BurnCap; k++) {
+        bool have = k < burnCount;
+        int idx = (burnHead - k + BurnCap) % BurnCap;
+        Vector3 pos = have ? burnPos[idx] : lastPos;
+        float age = have ? now - burnTime[idx] : life;
+        // direction of travel -> width across it, flat on the floor
+        if (have && k + 1 < burnCount) {
+            auto d = Sub(pos, burnPos[(idx - 1 + BurnCap) % BurnCap]);
+            d.y = 0.0f;
+            if (Len(d) > 1e-4f)
+                lateral = Norm(Cross(Vector3{0, 1, 0}, d));
+        }
+        float a = 0.0f;
+        if (have && burnValid[idx] && age < life) {
+            float x = std::clamp(1.0f - age / life, 0.0f, 1.0f);
+            a = opacity * x * x;
+        }
+        float hot = std::clamp(1.0f - age / (life * 0.2f), 0.0f, 1.0f);  // white-hot right after contact
+        Color col = Lerp(base, Color(1, 1, 1, 1), hot);
+        verts[k * 2] = Sub(pos, Mul(lateral, halfW));
+        verts[k * 2 + 1] = Add(pos, Mul(lateral, halfW));
+        cols[k * 2] = {col.r * a, col.g * a, col.b * a, a};
+        cols[k * 2 + 1] = cols[k * 2];
+        lastPos = pos;
+    }
+    layer->Upload();
+}
+
 // ---------------------------------------------------------------------------------------------
 // Menu preview
 // ---------------------------------------------------------------------------------------------
@@ -512,6 +614,9 @@ void PrismTrail::PreviewPose(float now, Vector3& bottom, Vector3& top) {
     Vector3 hand = Add(Add(anchor, Mul(pvRight, 0.30f * s)), Mul(up, 0.08f * std::sin(2.0f * a)));
     bottom = Add(hand, Mul(dir, 0.16f));
     top = Add(bottom, Mul(dir, 1.0f * std::max(c.LengthScale.GetValue(), 0.1f)));
+    float sc = std::clamp(c.PreviewScale.GetValue(), 0.2f, 2.0f);
+    bottom = Add(anchor, Mul(Sub(bottom, anchor), sc));
+    top = Add(anchor, Mul(Sub(top, anchor), sc));
 }
 
 void PrismTrail::DrawPreviewBlade(float now, Vector3 bottom, Vector3 top) {
@@ -534,13 +639,19 @@ void PrismTrail::DrawPreviewBlade(float now, Vector3 bottom, Vector3 top) {
     auto col = BaseColor(now);
     Color hilt{0.03f, 0.03f, 0.035f, 1.0f};
     Color blade{col.r, col.g, col.b, 1.0f};
+    Color bladeEnd = blade;
+    if (c.BladeGradient.GetValue()) {
+        blade = isLeft ? c.GradLeftStart.GetValue() : c.GradRightStart.GetValue();
+        bladeEnd = isLeft ? c.GradLeftEnd.GetValue() : c.GradRightEnd.GetValue();
+        blade.a = bladeEnd.a = 1.0f;
+    }
 
     auto verts = layer->vertices;
     auto cols = layer->colors;
     // sample 0-1: hilt, sample 2-3: blade (1 and 2 share a position, so the strip between them has no area)
     Vector3 centers[4] = {hiltBottom, bottom, bottom, top};
     float widths[4] = {hiltW, hiltW, bladeW, bladeW};
-    Color colors[4] = {hilt, hilt, blade, blade};
+    Color colors[4] = {hilt, hilt, blade, bladeEnd};
     for (int i = 0; i < 4; i++) {
         verts[i * 2] = Sub(centers[i], Mul(side, widths[i]));
         verts[i * 2 + 1] = Add(centers[i], Mul(side, widths[i]));
@@ -593,7 +704,7 @@ namespace PrysmSabers {
     static UnityW<Material> g_solidMaterial;
 
     // flat, unlit, alpha-blended material for solid parts (black handle, blade); built-in shader, so it is always there
-    static Material* SolidMaterial() {
+    Material* SolidMaterial() {
         if (g_solidMaterial)
             return g_solidMaterial.ptr();
         auto shader = Shader::Find("Sprites/Default");
@@ -609,24 +720,20 @@ namespace PrysmSabers {
         auto material = FindTrailMaterial();
         if (!material)
             return;
-        // fixed position next to the menu panel; axes come from the camera so "left" is really your left
-        Vector3 origin{0, 1.6f, 3.0f}, right{1, 0, 0}, fwd{0, 0, 1};
-        auto cam = Camera::get_main();
-        Vector3 camPos = cam ? cam->get_transform()->get_position() : Vector3{0, 1.6f, 0};
-        if (anchor)
-            origin = anchor->get_position();
-        else if (cam) {
-            auto f = cam->get_transform()->get_forward();
+        // Fixed spot measured from YOUR HEAD at the moment the tab opens (not from the menu panel, whose position
+        // is unreliable): a bit to the left, below eye level, closer than the menu so it can never end up behind it.
+        Vector3 origin{0, 1.6f, 0}, right{1, 0, 0}, fwd{0, 0, 1};
+        if (auto cam = Camera::get_main()) {
+            auto t = cam->get_transform();
+            origin = t->get_position();
+            auto f = t->get_forward();
             f.y = 0;
-            origin = Add(camPos, Mul(Norm(f), 3.0f));
-        }
-        if (cam || anchor) {
-            Vector3 toCam = Sub(camPos, origin);
-            toCam.y = 0;
-            if (Len(toCam) > 0.01f) {
-                fwd = Norm(Mul(toCam, -1.0f));  // from the menu away from you
-                right = Norm(Cross(Vector3{0, 1, 0}, fwd));  // your right
+            if (Len(f) > 0.01f) {
+                fwd = Norm(f);
+                right = Norm(Cross(Vector3{0, 1, 0}, fwd));
             }
+        } else if (anchor) {
+            origin = anchor->get_position();
         }
         auto solid = SolidMaterial();
         for (int i = 0; i < 2; i++) {
@@ -641,7 +748,7 @@ namespace PrysmSabers {
     // Prysm saber model: black handle + simple thin blade, generated in code (no asset bundle needed)
     // ----------------------------------------------------------------------------------------
 
-    static Mesh* MakeTube(Vector3 origin, Vector3 dir, Vector3 u, Vector3 v, std::vector<std::pair<float, float>> const& rings, int seg) {
+    static Mesh* MakeTube(Vector3 origin, Vector3 dir, Vector3 u, Vector3 v, std::vector<std::pair<float, float>> const& rings, int seg, std::vector<Color> const* ringColors = nullptr) {
         int n = (int) rings.size();
         int vcount = n * seg + 2;
         auto verts = ArrayW<Vector3>(il2cpp_array_size_t(vcount));
@@ -672,6 +779,15 @@ namespace PrysmSabers {
         auto mesh = Mesh::New_ctor();
         mesh->set_vertices(verts);
         mesh->set_triangles(tris);
+        if (ringColors && (int) ringColors->size() == n) {
+            auto cols = ArrayW<Color>(il2cpp_array_size_t(vcount));
+            for (int r = 0; r < n; r++)
+                for (int s = 0; s < seg; s++)
+                    cols[r * seg + s] = (*ringColors)[r];
+            cols[bottomCenter] = (*ringColors)[0];
+            cols[topCenter] = (*ringColors)[n - 1];
+            mesh->set_colors(cols);
+        }
         mesh->RecalculateBounds();
         return mesh;
     }
@@ -711,7 +827,17 @@ namespace PrysmSabers {
         float thick = std::clamp(c.ThicknessScale.GetValue(), 0.2f, 3.0f);
         float r = 0.0105f * thick;
         auto hiltMesh = MakeTube(b, dir, u, v, {{-0.17f, 0.0135f}, {-0.163f, 0.0172f}, {-0.03f, 0.0172f}, {0.0f, 0.0145f}}, 10);
-        auto bladeMesh = MakeTube(b, dir, u, v, {{0.0f, r}, {bladeLen - 0.025f, r}, {bladeLen - 0.008f, r * 0.8f}, {bladeLen, r * 0.4f}}, 8);
+        bool gradient = c.BladeGradient.GetValue();
+        std::vector<std::pair<float, float>> bladeRings = {{0.0f, r}, {bladeLen - 0.025f, r}, {bladeLen - 0.008f, r * 0.8f}, {bladeLen, r * 0.4f}};
+        std::vector<Color> bladeColors;
+        if (gradient) {
+            bool left = trail->IsLeft();
+            Color g0 = left ? c.GradLeftStart.GetValue() : c.GradRightStart.GetValue();
+            Color g1 = left ? c.GradLeftEnd.GetValue() : c.GradRightEnd.GetValue();
+            for (auto const& ring : bladeRings)
+                bladeColors.push_back(Lerp(g0, g1, std::clamp(ring.first / std::max(bladeLen, 0.01f), 0.0f, 1.0f)));
+        }
+        auto bladeMesh = MakeTube(b, dir, u, v, bladeRings, 8, gradient ? &bladeColors : nullptr);
 
         auto hiltMat = Material::New_ctor(solid);
         hiltMat->set_color(Color(0.02f, 0.02f, 0.025f, 1.0f));
@@ -731,7 +857,7 @@ namespace PrysmSabers {
         };
         addPart("PrysmHilt", hiltMesh, hiltMat);
         addPart("PrysmBlade", bladeMesh, bladeMat);
-        trail->SetBladeMaterial(bladeMat);
+        trail->SetBladeMaterial(gradient ? nullptr : bladeMat);
         logger.info("Prysm saber model applied (hid {} game renderers, blade length {})", hidden, bladeLen);
     }
 }
