@@ -20,6 +20,9 @@ namespace PrysmSabers {
             float sparkles, thickness, glowIntensity, rainbowSpeed;
             bool bladeGradient = false;
             float bend = 4.0f;
+            int particleStyle = 0;
+            bool flameBlade = false;
+            float crystal = 0.0f;
         };
 
         // clang-format off
@@ -46,6 +49,12 @@ namespace PrysmSabers {
             c.BladeGradient.SetValue(p.bladeGradient, false);
             c.CurveTaper.SetValue(p.taper, false);
             c.CurveBend.SetValue(p.bend, false);
+            c.ParticleStyle.SetValue(p.particleStyle, false);
+            c.FlameBlade.SetValue(p.flameBlade, false);
+            c.CrystalAmount.SetValue(p.crystal, false);
+            c.ParticleAmount.SetValue(1.0f, false);
+            c.ParticleSize.SetValue(1.0f, false);
+            c.ParticleLife.SetValue(1.0f, false);
             c.BlurSnap.SetValue(p.blurSnap, false);
             c.BlurMinSpeed.SetValue(p.blurMin, false);
             c.BlurSpread.SetValue(p.blurSpread, false);
@@ -108,7 +117,7 @@ namespace PrysmSabers {
                        {true, 0.04f, 16, 0.0f, 1.0f, 0.55f, 0.3f, 0.3f, 0.85f, GradientColor, white},
                        {true, 0.18f, 64, 0.0f, 1.0f, 0.9f, 0.1f, 0.0f, 0.0f, GradientColor, white},
                        {true, 0.10f, 32, 0.95f, 1.0f, 1.0f, 0.2f, 0.6f, 0.0f, GradientColor, white},
-                       0.0f, true, 3.0f, 0.35f, 1, 0, 1, 2.0f, 0.9f, 1.4f, 0.35f, true, 4.5f});
+                       0.0f, true, 3.0f, 0.35f, 1, 0, 1, 2.0f, 0.9f, 1.4f, 0.35f, true, 4.5f, 1, true, 0.0f});
                 // blade colours match the flames
                 c.LeftColor.SetValue(Color(1.0f, 0.12f, 0.0f, 1.0f), false);
                 c.RightColor.SetValue(Color(0.35f, 0.25f, 1.0f, 1.0f), false);
@@ -132,7 +141,15 @@ namespace PrysmSabers {
                        {true, 0.14f, 32, 0.94f, 1.0f, 1.0f, 0.25f, 0.5f, 0.0f, SaberColor, white},
                        2.2f, true, 5.0f, 0.2f, 0, 0, 1, 1.0f, 0.8f, 0.9f, 0.35f, false, 7.0f});
                 break;
-            case 7:  // Prysm Low: maximum FPS
+            case 7:  // Prysmatic: glass shards orbiting the saber, crystalline trails
+                Apply({off,
+                       {true, 0.08f, 20, 0.4f, 1.04f, 0.22f, 0.5f, 0.0f, 0.8f, SaberColor, white},
+                       {true, 0.03f, 12, 0.0f, 1.0f, 0.45f, 0.3f, 0.3f, 0.85f, SaberColor, white},
+                       {true, 0.12f, 10, 0.0f, 1.0f, 0.78f, 0.25f, 0.2f, 0.0f, SaberToCustom, {0.7f, 0.95f, 1.0f, 1}},
+                       {true, 0.08f, 12, 0.96f, 1.0f, 1.0f, 0.2f, 0.7f, 0.0f, SaberToCustom, {0.8f, 1.0f, 1.0f, 1}},
+                       0.0f, true, 3.0f, 0.3f, 0, 0, 1, 1.2f, 0.8f, 0.9f, 0.35f, false, 4.0f, 2, false, 0.75f});
+                break;
+            case 8:  // Prysm Low: maximum FPS
                 Apply({{true, 0.12f, 10, 0.0f, 1.0f, 0.8f, 0.25f, 0.05f, 0.0f, SaberColor, white},
                        off, off, off, off,
                        0.0f, false, 3.0f, 0.35f, 0, 0, 1, 0.5f, 0.8f, 0.6f, 0.35f});

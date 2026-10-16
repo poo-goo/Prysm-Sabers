@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 
 #include "GlobalNamespace/Saber.hpp"
 #include "GlobalNamespace/SaberModelController.hpp"
@@ -31,6 +32,7 @@ DECLARE_CLASS_CODEGEN(PrysmSabers, PrismTrailLayer, UnityEngine::MonoBehaviour) 
    public:
     void Init(UnityEngine::Material* material, int sortingOrder);
     void Resize(int granularity, int cross, bool flipV, bool flatU);
+    void ResizeQuads(int quadCount);  // particle mode: independent quads, 4 vertices each
     void SetSolid(bool solid, UnityEngine::Material* solidMaterial);
     void Upload();
     void SetVisible(bool visible);
@@ -46,6 +48,8 @@ DECLARE_CLASS_CODEGEN(PrysmSabers, PrismTrail, UnityEngine::MonoBehaviour) {
     DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, ribbonLayer);
     DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, bladeLayer);
     DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, burnLayer);
+    DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, partSoftLayer);
+    DECLARE_INSTANCE_FIELD(UnityW<PrismTrailLayer>, partSharpLayer);
     DECLARE_INSTANCE_FIELD(UnityW<UnityEngine::Material>, bladeMat);
 
     DECLARE_INSTANCE_METHOD(void, LateUpdate);
@@ -89,6 +93,23 @@ DECLARE_CLASS_CODEGEN(PrysmSabers, PrismTrail, UnityEngine::MonoBehaviour) {
     bool burnValid[64];
     int burnHead;
     int burnCount;
+    // ---- particles (fire / shards), simulated on the CPU and drawn as quads ----
+    static constexpr int PCap = 96;
+    struct Particle {
+        UnityEngine::Vector3 pos, vel, n, e1, e2;
+        float age, life, size, alpha, rot, spin, t, r, w, phase, blur;
+        float jit[8];
+        int kind;  // 0 flame wisp, 1 ember, 2 shard
+    };
+    Particle parts[96];
+    uint32_t rng;
+    float partTime;
+    float emitAcc;
+    bool seeded;
+    UnityEngine::Vector3 partLastTop;
+    float Rand01();
+    void UpdateParticles(float now, UnityEngine::Vector3 bottom, UnityEngine::Vector3 top);
+
     void PushBurn(UnityEngine::Vector3 pos, float time, bool valid);
     void UpdateBurn(float now, UnityEngine::Vector3 bottom, UnityEngine::Vector3 top);
     UnityEngine::Vector3 pvOrigin;
@@ -114,6 +135,7 @@ namespace PrysmSabers {
     // Replaces the game saber visuals with the Prysm saber (black handle, thin simple blade)
     void ApplyCustomModel(GlobalNamespace::SaberModelController* model, GlobalNamespace::Saber* saber, PrismTrail* trail);
     UnityEngine::Material* SolidMaterial();
+    UnityEngine::Material* SoftMaterial();
     bool PreviewAvailable();
     void ShowPreview(UnityEngine::Transform* anchor);
     void HidePreview();

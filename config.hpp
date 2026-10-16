@@ -6,6 +6,7 @@ namespace PrysmSabers {
     enum ColorSource { SaberColor = 0, CustomColor = 1, Rainbow = 2, SaberToCustom = 3, GradientColor = 4 };
     inline std::vector<std::string> const ColorSourceNames = {"Saber", "Custom", "Rainbow", "Saber > Custom", "Gradient"};
     inline std::vector<std::string> const SaberModelNames = {"Vanilla", "Prysm"};
+    inline std::vector<std::string> const ParticleStyleNames = {"Off", "Fire", "Shards"};
     inline std::vector<std::string> const SaberColorModeNames = {"Game", "Custom", "Rainbow"};
     inline std::vector<std::string> const CutColorModeNames = {"Saber", "White", "Rainbow"};
 }
@@ -74,6 +75,14 @@ DECLARE_CONFIG(Config) {
     CONFIG_VALUE(LengthScale, float, "Blade Length", 1.0f, "Visual only, hitboxes are unchanged");
     CONFIG_VALUE(ThicknessScale, float, "Blade Width", 0.65f, "Visual only, hitboxes are unchanged");
 
+    // Particles
+    CONFIG_VALUE(ParticleStyle, int, "Particle Style", 0, "0 = off, 1 = fire (flames + embers), 2 = glass shards orbiting the blade");
+    CONFIG_VALUE(ParticleAmount, float, "Particle Amount", 1.0f);
+    CONFIG_VALUE(ParticleSize, float, "Particle Size", 1.0f);
+    CONFIG_VALUE(ParticleLife, float, "Particle Life", 1.0f, "How long particles stay before fading");
+    CONFIG_VALUE(FlameBlade, bool, "Flame Blade", false, "Prysm saber blade flickers like a flame");
+    CONFIG_VALUE(CrystalAmount, float, "Crystal Trails", 0.0f, "Faceted, glassy look for the trail layers (0 = smooth)");
+
     // Effects
     CONFIG_VALUE(CutSparkles, float, "Sparkles", 1.0f, "Multiplier for sparkle particles on note cuts");
     CONFIG_VALUE(CutExplosion, float, "Explosions", 1.0f, "Multiplier for explosion particles on note cuts");
@@ -92,5 +101,5 @@ DECLARE_CONFIG(Config) {
 
 namespace PrysmSabers {
     void ApplyPreset(int preset);
-    inline std::vector<std::string> const PresetNames = {"Prysm (default)", "Neon", "Silk", "Inferno", "Vanilla+", "Laser", "Whip", "Prysm Low (max FPS)"};
+    inline std::vector<std::string> const PresetNames = {"Prysm (default)", "Neon", "Silk", "Inferno", "Vanilla+", "Laser", "Whip", "Prysmatic", "Prysm Low (max FPS)"};
 }

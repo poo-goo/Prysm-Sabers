@@ -15,6 +15,8 @@
 #include "GlobalNamespace/TubeBloomPrePassLight.hpp"
 #include "UnityEngine/Camera.hpp"
 #include "UnityEngine/Shader.hpp"
+#include "UnityEngine/Texture2D.hpp"
+#include "UnityEngine/TextureWrapMode.hpp"
 #include "UnityEngine/MeshRenderer.hpp"
 #include "UnityEngine/Mesh.hpp"
 #include "UnityEngine/GameObject.hpp"
@@ -46,6 +48,16 @@ namespace PrysmSabers {
     static inline Vector3 Sub(Vector3 a, Vector3 b) { return {a.x - b.x, a.y - b.y, a.z - b.z}; }
     static inline Vector3 Mul(Vector3 a, float f) { return {a.x * f, a.y * f, a.z * f}; }
     static inline Vector3 Cross(Vector3 a, Vector3 b) { return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x}; }
+    static inline Vector3 Rot(Vector3 v, Vector3 n, float ang) {
+        float cs = std::cos(ang), sn = std::sin(ang);
+        float d = (n.x * v.x + n.y * v.y + n.z * v.z) * (1.0f - cs);
+        auto cr = Cross(n, v);
+        return {v.x * cs + cr.x * sn + n.x * d, v.y * cs + cr.y * sn + n.y * d, v.z * cs + cr.z * sn + n.z * d};
+    }
+    static inline float Hash3(int a, int b, int c) {
+        float x = std::sin(a * 12.9898f + b * 78.233f + c * 37.719f) * 43758.5453f;
+        return x - std::floor(x);
+    }
     static inline Vector3 Norm(Vector3 a) {
         float l = std::sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
         return l > 1e-6f ? Vector3{a.x / l, a.y / l, a.z / l} : Vector3{0, 1, 0};
@@ -151,6 +163,38 @@ void PrismTrailLayer::Resize(int gran, int cross, bool flip, bool flat) {
     mesh->set_triangles(triangles);
 }
 
+void PrismTrailLayer::ResizeQuads(int n) {
+    if (n == granularity && crossCount == -1 && vertices)
+        return;
+    granularity = n;
+    crossCount = -1;
+    flipV = false;
+    flatU = false;
+    vertices = ArrayW<Vector3>(il2cpp_array_size_t(n * 4));
+    colors = ArrayW<Color>(il2cpp_array_size_t(n * 4));
+    uvs = ArrayW<Vector2>(il2cpp_array_size_t(n * 4));
+    triangles = ArrayW<int>(il2cpp_array_size_t(n * 6));
+    for (int q = 0; q < n; q++) {
+        int b = q * 4;
+        uvs[b] = {0, 0};
+        uvs[b + 1] = {1, 0};
+        uvs[b + 2] = {0, 1};
+        uvs[b + 3] = {1, 1};
+        int t = q * 6;
+        triangles[t] = b;
+        triangles[t + 1] = b + 1;
+        triangles[t + 2] = b + 2;
+        triangles[t + 3] = b + 2;
+        triangles[t + 4] = b + 1;
+        triangles[t + 5] = b + 3;
+    }
+    mesh->Clear();
+    mesh->set_vertices(vertices);
+    mesh->set_colors(colors);
+    mesh->set_uv(uvs);
+    mesh->set_triangles(triangles);
+}
+
 void PrismTrailLayer::SetSolid(bool solid, Material* solidMaterial) {
     if (solid && !solidMaterial)
         solid = false;
@@ -204,15 +248,31 @@ void PrismTrail::InitCommon(Material* material, int layer, Material* solid) {
 
     burnHead = 0;
     burnCount = 0;
-    static constexpr char const* names[] = {"PrismMain", "PrismAura", "PrismBlur", "PrismCurve", "PrismRibbon", "PrismPreviewBlade", "PrismBurn"};
-    static constexpr int orders[] = {0, -2, 1, -1, 2, 3, -3};
-    for (int i = 0; i < 7; i++) {
+    rng = 0x9E3779B9u ^ (isLeft ? 0x1234567u : 0x7654321u);
+    partTime = 0;
+    emitAcc = 0;
+    seeded = false;
+    partLastTop = Vector3{0, 0, 0};
+    for (int i = 0; i < PCap; i++)
+        parts[i].life = 0;
+    static constexpr char const* names[] = {"PrismMain", "PrismAura", "PrismBlur", "PrismCurve", "PrismRibbon", "PrismPreviewBlade", "PrismBurn", "PrismSparks", "PrismShards"};
+    static constexpr int orders[] = {0, -2, 1, -1, 2, 3, -3, 4, 5};
+    for (int i = 0; i < 9; i++) {
         if ((i == 5 && !preview) || (i == 6 && preview))
+            continue;
+        Material* mat = material;
+        if (i == 5 && solid)
+            mat = solid;
+        if (i == 7)
+            mat = SoftMaterial();
+        if (i == 8)
+            mat = SolidMaterial();
+        if (!mat)
             continue;
         auto go = GameObject::New_ctor(names[i]);
         go->set_layer(layer);
         auto l = go->AddComponent<PrismTrailLayer*>();
-        l->Init(i == 5 && solid ? solid : material, orders[i]);
+        l->Init(mat, orders[i]);
         switch (i) {
             case 0: mainLayer = l; break;
             case 1: glowLayer = l; break;
@@ -220,26 +280,28 @@ void PrismTrail::InitCommon(Material* material, int layer, Material* solid) {
             case 3: curveLayer = l; break;
             case 4: ribbonLayer = l; break;
             case 5: bladeLayer = l; break;
-            default: burnLayer = l; break;
+            case 6: burnLayer = l; break;
+            case 7: partSoftLayer = l; break;
+            default: partSharpLayer = l; break;
         }
     }
 }
 
 void PrismTrail::OnEnable() {
     count = 0;
-    for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer, burnLayer})
+    for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer, burnLayer, partSoftLayer, partSharpLayer})
         if (l)
             l->get_gameObject()->SetActive(true);
 }
 
 void PrismTrail::OnDisable() {
-    for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer, burnLayer})
+    for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer, burnLayer, partSoftLayer, partSharpLayer})
         if (l)
             l->get_gameObject()->SetActive(false);
 }
 
 void PrismTrail::OnDestroy() {
-    for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer, burnLayer})
+    for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer, burnLayer, partSoftLayer, partSharpLayer})
         if (l)
             Object::Destroy(l->get_gameObject());
 }
@@ -358,6 +420,7 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
     float spread = isBlur ? std::clamp(c.BlurSpread.GetValue(), 0.0f, 0.8f) : 0.0f;
     float lead = duration * spread;
     float fadeExp = std::clamp(cfg.fade, 0.0f, 1.0f) * 4.0f;  // 0 = no fade at all, 1 = very strong fade
+    float crystal = isBlur ? 0.0f : std::clamp(c.CrystalAmount.GetValue(), 0.0f, 1.0f);
     float window = duration + lead;
     for (int i = 0; i <= gran; i++) {
         float u = (float) i / gran;
@@ -400,7 +463,15 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
                 verts[idx] = Add(s.bottom, Mul(blade, tpos[j]));
             }
             float aj = a * wgt[j];
-            cols[idx] = solidMode ? Color{col.r, col.g, col.b, aj} : Color{col.r * aj, col.g * aj, col.b * aj, aj};
+            Color cj = col;
+            if (crystal > 0.01f) {
+                // crystalline: every vertex gets its own brightness/opacity, some get a white glint, so the sheet reads as facets
+                float hsh = Hash3(i, j, which);
+                aj *= 1.0f - crystal * 0.6f * hsh;
+                if (hsh > 0.8f)
+                    cj = Lerp(col, Color(1, 1, 1, 1), crystal * 0.7f);
+            }
+            cols[idx] = solidMode ? Color{cj.r, cj.g, cj.b, aj} : Color{cj.r * aj, cj.g * aj, cj.b * aj, aj};
         }
     }
     layer->Upload();
@@ -495,7 +566,7 @@ void PrismTrail::LateUpdate() {
         UpdateBurn(now, bottom, top);
 
     if (!enabled) {
-        for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer, burnLayer})
+        for (auto l : {mainLayer, glowLayer, blurLayer, curveLayer, ribbonLayer, bladeLayer, burnLayer, partSoftLayer, partSharpLayer})
             if (l)
                 l->SetVisible(false);
         return;
@@ -523,11 +594,257 @@ void PrismTrail::LateUpdate() {
         DrawPreviewBlade(now, bottom, top);
     else {
         ApplyBladeColors(now);
-        if (bladeMat)
-            bladeMat->set_color(BaseColor(now));
+        if (bladeMat) {
+            Color tint = c.BladeGradient.GetValue() ? Color(1, 1, 1, 1) : BaseColor(now);
+            if (c.FlameBlade.GetValue()) {
+                // flickering flame: two out-of-phase sines modulate the blade brightness
+                float ph = isLeft ? 0.0f : 2.0f;
+                float f = 0.74f + 0.26f * (0.5f + 0.5f * std::sin(now * 43.0f + ph)) * (0.6f + 0.4f * std::sin(now * 17.3f + 1.3f + ph));
+                tint = Color(tint.r * f, tint.g * f, tint.b * f, 1.0f);
+            }
+            bladeMat->set_color(tint);
+        }
     }
+    UpdateParticles(now, bottom, top);
 }
 
+
+
+// ---------------------------------------------------------------------------------------------
+// Particles: fire (flame wisps + embers) and orbiting glass shards. CPU simulated, drawn as quads.
+// ---------------------------------------------------------------------------------------------
+
+float PrismTrail::Rand01() {
+    rng ^= rng << 13;
+    rng ^= rng >> 17;
+    rng ^= rng << 5;
+    return (rng & 0xFFFFFF) / 16777216.0f;
+}
+
+void PrismTrail::UpdateParticles(float now, Vector3 bottom, Vector3 top) {
+    auto soft = partSoftLayer ? partSoftLayer.ptr() : nullptr;
+    auto sharp = partSharpLayer ? partSharpLayer.ptr() : nullptr;
+    if (!soft || !sharp)
+        return;
+    auto& c = getConfig();
+    int style = c.PerformanceMode.GetValue() ? 0 : c.ParticleStyle.GetValue();
+    float dt = partTime > 0.0f ? std::clamp(now - partTime, 0.0f, 0.05f) : 0.0f;
+    partTime = now > 0.0f ? now : 0.001f;
+
+    bool any = false;
+    for (int i = 0; i < PCap; i++) {
+        if (parts[i].life > 0.0f) {
+            any = true;
+            break;
+        }
+    }
+    if (style == 0 && !any) {
+        soft->SetVisible(false);
+        sharp->SetVisible(false);
+        seeded = false;
+        return;
+    }
+
+    Vector3 bladeVel{0, 0, 0};
+    if (dt > 1e-4f) {
+        bladeVel = Mul(Sub(top, partLastTop), 1.0f / dt);
+        float sp = Len(bladeVel);
+        if (sp > 12.0f)
+            bladeVel = Mul(bladeVel, 12.0f / sp);
+    }
+    partLastTop = top;
+
+    Vector3 camRight{1, 0, 0}, camUp{0, 1, 0};
+    if (auto cam = Camera::get_main()) {
+        auto t = cam->get_transform();
+        camRight = t->get_right();
+        camUp = t->get_up();
+    }
+    Vector3 dirV = Sub(top, bottom);
+    Vector3 dir = Norm(dirV);
+    Vector3 helper = std::abs(dir.y) < 0.9f ? Vector3{0, 1, 0} : Vector3{1, 0, 0};
+    Vector3 u = Norm(Cross(dir, helper));
+    Vector3 v = Cross(dir, u);
+
+    Color g0 = isLeft ? c.GradLeftStart.GetValue() : c.GradRightStart.GetValue();
+    Color g1 = isLeft ? c.GradLeftEnd.GetValue() : c.GradRightEnd.GetValue();
+    Color saberCol = BaseColor(now);
+    float amount = std::clamp(c.ParticleAmount.GetValue(), 0.1f, 3.0f);
+    float sizeS = std::clamp(c.ParticleSize.GetValue(), 0.3f, 3.0f);
+    float lifeS = std::clamp(c.ParticleLife.GetValue(), 0.3f, 3.0f);
+
+    auto slot = [&]() -> Particle* {
+        for (int i = 0; i < PCap; i++)
+            if (parts[i].life <= 0.0f)
+                return &parts[i];
+        return nullptr;
+    };
+
+    if (style == 1) {
+        // fire: more sparks the faster the blade moves
+        float speed = std::min(Len(bladeVel), 10.0f);
+        emitAcc += amount * (30.0f + 12.0f * speed) * dt;
+        int guard = 0;
+        while (emitAcc >= 1.0f && guard++ < 8) {
+            emitAcc -= 1.0f;
+            auto p = slot();
+            if (!p)
+                break;
+            bool ember = Rand01() < 0.4f;
+            float t = ember ? 0.25f + 0.75f * Rand01() : 0.08f + 0.92f * Rand01();
+            Vector3 off = Add(Mul(u, (Rand01() - 0.5f) * 0.03f), Mul(v, (Rand01() - 0.5f) * 0.03f));
+            p->pos = Add(Add(bottom, Mul(dirV, t)), off);
+            Vector3 jit{Rand01() - 0.5f, Rand01() - 0.5f, Rand01() - 0.5f};
+            if (ember) {
+                p->vel = Add(Add(Mul(jit, 1.2f), Vector3{0, 0.35f, 0}), Mul(bladeVel, 0.15f));
+                p->life = (0.5f + 0.7f * Rand01()) * lifeS;
+                p->size = (0.006f + 0.008f * Rand01()) * sizeS;
+                p->kind = 1;
+            } else {
+                p->vel = Add(Add(Mul(jit, 0.25f), Vector3{0, 0.55f, 0}), Mul(bladeVel, 0.1f));
+                p->life = (0.18f + 0.27f * Rand01()) * lifeS;
+                p->size = (0.03f + 0.04f * Rand01()) * sizeS;
+                p->kind = 0;
+            }
+            p->age = 0.0f;
+            p->alpha = 0.5f + 0.5f * Rand01();
+            p->t = Rand01();
+        }
+    } else if (style == 2) {
+        // shards: keep a fixed population orbiting the blade
+        int target = std::clamp((int) std::round(24.0f * amount), 1, 90);
+        int alive = 0;
+        for (int i = 0; i < PCap; i++)
+            if (parts[i].life > 0.0f && parts[i].kind == 2)
+                alive++;
+        int spawned = 0;
+        while (alive < target && spawned < 6) {
+            auto p = slot();
+            if (!p)
+                break;
+            p->kind = 2;
+            p->t = 0.1f + 0.9f * Rand01();
+            p->r = 0.025f + 0.05f * Rand01();
+            p->w = (Rand01() < 0.5f ? -1.0f : 1.0f) * (1.5f + 3.0f * Rand01());
+            p->phase = 6.2831853f * Rand01();
+            p->life = (1.2f + 2.3f * Rand01()) * lifeS;
+            p->age = seeded ? 0.0f : p->life * Rand01() * 0.9f;  // first fill starts at random ages
+            p->size = (0.007f + 0.011f * Rand01()) * sizeS;
+            p->alpha = 0.35f + 0.65f * Rand01();
+            p->blur = Rand01();
+            for (int k = 0; k < 8; k++)
+                p->jit[k] = (Rand01() - 0.5f) * 0.7f;
+            Vector3 n = Norm(Vector3{Rand01() - 0.5f, Rand01() - 0.5f, Rand01() - 0.5f});
+            Vector3 hp = std::abs(n.y) < 0.9f ? Vector3{0, 1, 0} : Vector3{1, 0, 0};
+            p->n = n;
+            p->e1 = Norm(Cross(n, hp));
+            p->e2 = Cross(n, p->e1);
+            p->rot = 6.2831853f * Rand01();
+            p->spin = (Rand01() - 0.5f) * 8.0f;
+            alive++;
+            spawned++;
+        }
+        seeded = true;
+    }
+
+    soft->ResizeQuads(PCap * 2);
+    sharp->ResizeQuads(PCap);
+    soft->SetVisible(true);
+    sharp->SetVisible(true);
+    auto sv = soft->vertices;
+    auto sc = soft->colors;
+    auto hv = sharp->vertices;
+    auto hc = sharp->colors;
+    int sq = 0, hq = 0;
+    auto softQuad = [&](Vector3 ctr, Vector3 rx, Vector3 ry, Color col) {
+        if (sq >= PCap * 2)
+            return;
+        int b = sq * 4;
+        sv[b] = Sub(Sub(ctr, rx), ry);
+        sv[b + 1] = Sub(Add(ctr, rx), ry);
+        sv[b + 2] = Add(Sub(ctr, rx), ry);
+        sv[b + 3] = Add(Add(ctr, rx), ry);
+        for (int k = 0; k < 4; k++)
+            sc[b + k] = col;
+        sq++;
+    };
+
+    static constexpr float sx[4] = {-1, 1, -1, 1};
+    static constexpr float sy[4] = {-1, -1, 1, 1};
+    for (int i = 0; i < PCap; i++) {
+        auto& p = parts[i];
+        if (p.life <= 0.0f)
+            continue;
+        p.age += dt;
+        if (p.age >= p.life) {
+            p.life = 0.0f;
+            continue;
+        }
+        float x = p.age / p.life;
+        if (p.kind == 0) {  // flame wisp: soft, tall, rises and shrinks
+            p.vel = Mul(p.vel, 1.0f - std::min(2.0f * dt, 0.9f));
+            p.pos = Add(p.pos, Mul(p.vel, dt));
+            Color col = Lerp(g0, g1, x);
+            float a = p.alpha * 0.7f * (1.0f - x) * std::min(1.0f, x * 10.0f);
+            float sz = p.size * (1.0f - 0.45f * x);
+            softQuad(p.pos, Mul(camRight, sz), Vector3{0, sz * 1.9f, 0}, Color{col.r, col.g, col.b, a});
+        } else if (p.kind == 1) {  // ember: tiny, hot, flickers
+            p.vel = Mul(p.vel, 1.0f - std::min(1.2f * dt, 0.9f));
+            p.vel.y += 0.25f * dt;
+            p.pos = Add(p.pos, Mul(p.vel, dt));
+            Color hot{1.0f, 0.92f, 0.65f, 1.0f};
+            Color col = Lerp(hot, g0, std::min(1.0f, x * 1.5f));
+            float flick = 0.55f + 0.45f * std::sin(p.t * 61.0f + now * 35.0f);
+            float a = p.alpha * (1.0f - x) * flick;
+            softQuad(p.pos, Mul(camRight, p.size), Mul(camUp, p.size), Color{col.r, col.g, col.b, a});
+        } else {  // shard: orbits the blade, tumbles, glassy facets
+            float th = p.phase + p.w * p.age;
+            float rr = p.r * (1.0f + 0.15f * std::sin(p.age * 3.0f + p.phase));
+            Vector3 bp = Add(bottom, Mul(dirV, p.t));
+            p.pos = Add(bp, Add(Mul(u, std::cos(th) * rr), Mul(v, std::sin(th) * rr)));
+            float ph = p.rot + p.spin * p.age;
+            Vector3 e1 = Rot(p.e1, p.n, ph), e2 = Rot(p.e2, p.n, ph);
+            float fade = std::min(1.0f, p.age / 0.15f) * std::min(1.0f, (p.life - p.age) / (0.35f * p.life));
+            float a = p.alpha * fade;
+            Color base = Lerp(saberCol, Color(1, 1, 1, 1), 0.55f);
+            Color ice = Lerp(base, Color(0.55f, 0.95f, 1.0f, 1.0f), 0.35f);
+            if (hq < PCap) {
+                int b = hq * 4;
+                float as = a * (1.0f - 0.45f * p.blur);  // blurrier shards are fainter, their halo carries them
+                for (int k = 0; k < 4; k++) {
+                    Vector3 off = Add(Mul(e1, sx[k] * (1.0f + p.jit[2 * k]) * p.size), Mul(e2, sy[k] * (1.0f + p.jit[2 * k + 1]) * p.size));
+                    hv[b + k] = Add(p.pos, off);
+                }
+                hc[b] = Color{base.r, base.g, base.b, as};
+                hc[b + 1] = Color{ice.r, ice.g, ice.b, as * 0.65f};
+                hc[b + 2] = Color{ice.r, ice.g, ice.b, as * 0.85f};
+                hc[b + 3] = Color{1.0f, 1.0f, 1.0f, as};
+                hq++;
+            }
+            if (p.blur > 0.35f) {
+                float hs = p.size * (2.0f + 2.0f * p.blur);
+                softQuad(p.pos, Mul(camRight, hs), Mul(camUp, hs), Color{base.r, base.g, base.b, a * 0.3f * p.blur});
+            }
+        }
+    }
+    // park unused quads (invisible)
+    for (; sq < PCap * 2; sq++) {
+        int b = sq * 4;
+        for (int k = 0; k < 4; k++) {
+            sv[b + k] = bottom;
+            sc[b + k] = Color{0, 0, 0, 0};
+        }
+    }
+    for (; hq < PCap; hq++) {
+        int b = hq * 4;
+        for (int k = 0; k < 4; k++) {
+            hv[b + k] = bottom;
+            hc[b + k] = Color{0, 0, 0, 0};
+        }
+    }
+    soft->Upload();
+    sharp->Upload();
+}
 
 // ---------------------------------------------------------------------------------------------
 // Floor burn marks (the Quest game does not draw these, so Prysm Sabers does)
@@ -714,6 +1031,34 @@ namespace PrysmSabers {
     static UnityW<Material> g_solidMaterial;
 
     // flat, unlit, alpha-blended material for solid parts (black handle, blade); built-in shader, so it is always there
+    static UnityW<Material> g_softMaterial;
+
+    // soft round sprite (generated radial gradient), additive if the built-in additive particle shader is available
+    Material* SoftMaterial() {
+        if (g_softMaterial)
+            return g_softMaterial.ptr();
+        auto shader = Shader::Find("Legacy Shaders/Particles/Additive");
+        if (!shader)
+            shader = Shader::Find("Sprites/Default");
+        if (!shader)
+            return nullptr;
+        auto mat = Material::New_ctor(shader);
+        auto tex = Texture2D::New_ctor(32, 32);
+        for (int y = 0; y < 32; y++) {
+            for (int x = 0; x < 32; x++) {
+                float dx = (x - 15.5f) / 15.5f, dy = (y - 15.5f) / 15.5f;
+                float a = std::clamp(1.0f - std::sqrt(dx * dx + dy * dy), 0.0f, 1.0f);
+                a = a * a * (3.0f - 2.0f * a);
+                tex->SetPixel(x, y, Color(1, 1, 1, a));
+            }
+        }
+        tex->Apply();
+        tex->set_wrapMode(TextureWrapMode::Clamp);
+        mat->set_mainTexture(tex);
+        g_softMaterial = mat;
+        return mat;
+    }
+
     Material* SolidMaterial() {
         if (g_solidMaterial)
             return g_solidMaterial.ptr();
@@ -867,7 +1212,7 @@ namespace PrysmSabers {
         };
         addPart("PrysmHilt", hiltMesh, hiltMat);
         addPart("PrysmBlade", bladeMesh, bladeMat);
-        trail->SetBladeMaterial(gradient ? nullptr : bladeMat);
+        trail->SetBladeMaterial(bladeMat);
         logger.info("Prysm saber model applied (hid {} game renderers, blade length {})", hidden, bladeLen);
     }
 }

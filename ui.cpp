@@ -23,8 +23,8 @@ namespace PrysmSabers {
     namespace {
         // The menu is split into pages. Only one page's controls exist at a time, which keeps the menu
         // fast to open, stops long lists from running off the panel, and avoids overlapping rows.
-        constexpr int SectionCount = 10;
-        constexpr char const* SectionNames[SectionCount] = {"General", "Colors", "Trail", "Curve", "Ribbon", "Aura", "Blur", "Saber", "Effects", "Preview"};
+        constexpr int SectionCount = 11;
+        constexpr char const* SectionNames[SectionCount] = {"General", "Colors", "Trail", "Curve", "Ribbon", "Aura", "Blur", "Saber", "Effects", "Particles", "Preview"};
         int currentSection = 0;
 
         void FixHeight(UnityEngine::GameObject* go, float height) {
@@ -179,6 +179,14 @@ namespace PrysmSabers {
                     AddConfigValueSliderIncrement(parent, c.BurnOpacity, 0.05f, 0.0f, 1.0f);
                     AddConfigValueSliderIncrement(parent, c.BurnFloorOffset, 0.05f, -1.0f, 2.0f);
                     AddConfigValueToggle(parent, c.BurnSparkles);
+                    break;
+                case 9:
+                    AddConfigValueIncrementEnum(parent, c.ParticleStyle, ParticleStyleNames);
+                    AddConfigValueSliderIncrement(parent, c.ParticleAmount, 0.1f, 0.1f, 3.0f);
+                    AddConfigValueSliderIncrement(parent, c.ParticleSize, 0.1f, 0.3f, 3.0f);
+                    AddConfigValueSliderIncrement(parent, c.ParticleLife, 0.1f, 0.3f, 3.0f);
+                    AddConfigValueToggle(parent, c.FlameBlade);
+                    AddConfigValueSliderIncrement(parent, c.CrystalAmount, 0.05f, 0.0f, 1.0f);
                     break;
                 default: PreviewControls(parent, h); break;
             }
