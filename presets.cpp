@@ -19,6 +19,7 @@ namespace PrysmSabers {
             int saberMode, cutMode, model;
             float sparkles, thickness, glowIntensity, rainbowSpeed;
             bool bladeGradient = false;
+            float bend = 4.0f;
         };
 
         // clang-format off
@@ -44,6 +45,7 @@ namespace PrysmSabers {
             c.BlurSolid.SetValue(false, false);
             c.BladeGradient.SetValue(p.bladeGradient, false);
             c.CurveTaper.SetValue(p.taper, false);
+            c.CurveBend.SetValue(p.bend, false);
             c.BlurSnap.SetValue(p.blurSnap, false);
             c.BlurMinSpeed.SetValue(p.blurMin, false);
             c.BlurSpread.SetValue(p.blurSpread, false);
@@ -98,7 +100,7 @@ namespace PrysmSabers {
                        off,
                        {true, 0.35f, 96, 0.0f, 1.0f, 0.8f, 0.2f, 0.1f, 0.0f, SaberToCustom, {1.0f, 1.0f, 1.0f, 1}},
                        {true, 0.30f, 96, 0.96f, 1.0f, 1.0f, 0.2f, 0.5f, 0.0f, SaberColor, white},
-                       0.6f, true, 3.0f, 0.35f, 0, 0, 1, 0.6f, 0.8f, 1.0f, 0.35f});
+                       0.6f, true, 3.0f, 0.35f, 0, 0, 1, 0.6f, 0.8f, 1.0f, 0.35f, false, 3.0f});
                 break;
             case 3:  // Inferno: flames. Red saber red->orange, blue saber deep violet-blue->light blue
                 Apply({{true, 0.16f, 56, 0.0f, 1.05f, 0.6f, 0.25f, 0.1f, 0.6f, GradientColor, white},
@@ -106,7 +108,7 @@ namespace PrysmSabers {
                        {true, 0.04f, 16, 0.0f, 1.0f, 0.55f, 0.3f, 0.3f, 0.85f, GradientColor, white},
                        {true, 0.18f, 64, 0.0f, 1.0f, 0.9f, 0.1f, 0.0f, 0.0f, GradientColor, white},
                        {true, 0.10f, 32, 0.95f, 1.0f, 1.0f, 0.2f, 0.6f, 0.0f, GradientColor, white},
-                       0.0f, true, 3.0f, 0.35f, 1, 0, 1, 2.0f, 0.9f, 1.4f, 0.35f, true});
+                       0.0f, true, 3.0f, 0.35f, 1, 0, 1, 2.0f, 0.9f, 1.4f, 0.35f, true, 4.5f});
                 // blade colours match the flames
                 c.LeftColor.SetValue(Color(1.0f, 0.12f, 0.0f, 1.0f), false);
                 c.RightColor.SetValue(Color(0.35f, 0.25f, 1.0f, 1.0f), false);
@@ -128,7 +130,7 @@ namespace PrysmSabers {
                        {true, 0.03f, 12, 0.0f, 1.0f, 0.5f, 0.25f, 0.5f, 0.8f, SaberColor, white},
                        {true, 0.20f, 56, 0.0f, 1.0f, 0.95f, 0.15f, 0.0f, 0.0f, SaberColor, white},
                        {true, 0.14f, 32, 0.94f, 1.0f, 1.0f, 0.25f, 0.5f, 0.0f, SaberColor, white},
-                       2.2f, true, 5.0f, 0.2f, 0, 0, 1, 1.0f, 0.8f, 0.9f, 0.35f});
+                       2.2f, true, 5.0f, 0.2f, 0, 0, 1, 1.0f, 0.8f, 0.9f, 0.35f, false, 7.0f});
                 break;
             case 7:  // Prysm Low: maximum FPS
                 Apply({{true, 0.12f, 10, 0.0f, 1.0f, 0.8f, 0.25f, 0.05f, 0.0f, SaberColor, white},

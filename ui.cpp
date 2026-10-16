@@ -23,8 +23,8 @@ namespace PrysmSabers {
     namespace {
         // The menu is split into pages. Only one page's controls exist at a time, which keeps the menu
         // fast to open, stops long lists from running off the panel, and avoids overlapping rows.
-        constexpr int SectionCount = 9;
-        constexpr char const* SectionNames[SectionCount] = {"General", "Colors", "Trail", "Curve", "Ribbon", "Aura", "Blur", "Saber", "Effects"};
+        constexpr int SectionCount = 10;
+        constexpr char const* SectionNames[SectionCount] = {"General", "Colors", "Trail", "Curve", "Ribbon", "Aura", "Blur", "Saber", "Effects", "Preview"};
         int currentSection = 0;
 
         void FixHeight(UnityEngine::GameObject* go, float height) {
@@ -70,6 +70,32 @@ namespace PrysmSabers {
             Build(host.ptr());
         }
 
+        // The preview has its own page so its controls do not crowd the General page
+        void PreviewControls(Transform* parent, UnityW<Transform> h) {
+            auto& c = getConfig();
+            BSML::Lite::CreateUIButton(parent, c.PreviewEnabled.GetValue() ? "Live Preview: ON" : "Live Preview: OFF", [h]() {
+                bool on = !getConfig().PreviewEnabled.GetValue();
+                getConfig().PreviewEnabled.SetValue(on);
+                if (on)
+                    ShowPreview(const_cast<Transform*>(h.ptr()));
+                else
+                    HidePreview();
+                Rebuild(h);
+            });
+            {
+                auto status = BSML::Lite::CreateText(parent, fmt::format("Preview: {}  |  trail material: {}", PreviewVisible() ? "showing" : "hidden", PreviewAvailable() ? "found" : "missing"), TMPro::FontStyles::Normal, 3.0f);
+                FixHeight(status->get_gameObject(), 5.0f);
+            }
+            if (c.PreviewEnabled.GetValue() && !PreviewAvailable()) {
+                auto note = BSML::Lite::CreateText(parent, "Preview needs the game's trail material.\nPlay any song once, then reopen this tab.", TMPro::FontStyles::Normal, 3.2f);
+                FixHeight(note->get_gameObject(), 12.0f);
+            }
+            AddConfigValueSliderIncrement(parent, c.PreviewScale, 0.1f, 0.2f, 2.0f);
+            AddConfigValueSliderIncrement(parent, c.PreviewX, 0.1f, -4.0f, 4.0f);
+            AddConfigValueSliderIncrement(parent, c.PreviewY, 0.1f, -3.0f, 3.0f);
+            AddConfigValueSliderIncrement(parent, c.PreviewZ, 0.1f, -3.0f, 3.0f);
+        }
+
         void Build(Transform* host) {
             auto& c = getConfig();
             UnityW<Transform> h(host);
@@ -94,27 +120,6 @@ namespace PrysmSabers {
                     AddConfigValueToggle(parent, c.Enabled);
                     AddConfigValueToggle(parent, c.HideVanillaTrail);
                     AddConfigValueToggle(parent, c.PerformanceMode);
-                    BSML::Lite::CreateUIButton(parent, c.PreviewEnabled.GetValue() ? "Live Preview: ON" : "Live Preview: OFF", [h]() {
-                        bool on = !getConfig().PreviewEnabled.GetValue();
-                        getConfig().PreviewEnabled.SetValue(on);
-                        if (on)
-                            ShowPreview(const_cast<Transform*>(h.ptr()));
-                        else
-                            HidePreview();
-                        Rebuild(h);
-                    });
-                    {
-                        auto status = BSML::Lite::CreateText(parent, fmt::format("Preview: {}  |  trail material: {}", PreviewVisible() ? "showing" : "hidden", PreviewAvailable() ? "found" : "missing"), TMPro::FontStyles::Normal, 3.0f);
-                        FixHeight(status->get_gameObject(), 5.0f);
-                    }
-                    if (c.PreviewEnabled.GetValue() && !PreviewAvailable()) {
-                        auto note = BSML::Lite::CreateText(parent, "Preview needs the game's trail material.\nPlay any song once, then reopen this tab.", TMPro::FontStyles::Normal, 3.2f);
-                        FixHeight(note->get_gameObject(), 12.0f);
-                    }
-                    AddConfigValueSliderIncrement(parent, c.PreviewScale, 0.1f, 0.2f, 2.0f);
-                    AddConfigValueSliderIncrement(parent, c.PreviewX, 0.1f, -4.0f, 4.0f);
-                    AddConfigValueSliderIncrement(parent, c.PreviewY, 0.1f, -3.0f, 3.0f);
-                    AddConfigValueSliderIncrement(parent, c.PreviewZ, 0.1f, -3.0f, 3.0f);
                     AddConfigValueToggle(parent, c.FlipTrailV);
                     AddConfigValueToggle(parent, c.TrailTextureFade);
                     Header(parent, "Presets");
@@ -142,7 +147,8 @@ namespace PrysmSabers {
                 case 2: LAYER_UI(Main) LAYER_SOFT(Main) break;
                 case 3:
                     LAYER_UI(Curve)
-                    AddConfigValueSliderIncrement(parent, c.CurveTaper, 0.1f, 0.2f, 6.0f);
+                    AddConfigValueSliderIncrement(parent, c.CurveBend, 0.25f, 0.0f, 12.0f);
+                    AddConfigValueSliderIncrement(parent, c.CurveTaper, 0.1f, 0.0f, 6.0f);
                     break;
                 case 4: LAYER_UI(Ribbon) LAYER_SOFT(Ribbon) break;
                 case 5: LAYER_UI(Glow) LAYER_SOFT(Glow) break;
@@ -161,7 +167,7 @@ namespace PrysmSabers {
                     AddConfigValueSliderIncrement(parent, c.LengthScale, 0.05f, 0.25f, 2.0f);
                     AddConfigValueSliderIncrement(parent, c.ThicknessScale, 0.05f, 0.25f, 3.0f);
                     break;
-                default:
+                case 8:
                     AddConfigValueSliderIncrement(parent, c.CutSparkles, 0.1f, 0.0f, 4.0f);
                     AddConfigValueSliderIncrement(parent, c.CutExplosion, 0.1f, 0.0f, 4.0f);
                     AddConfigValueSliderIncrement(parent, c.CutLifetime, 0.1f, 0.1f, 3.0f);
@@ -171,9 +177,10 @@ namespace PrysmSabers {
                     AddConfigValueSliderIncrement(parent, c.BurnLife, 0.1f, 0.1f, 3.0f);
                     AddConfigValueSliderIncrement(parent, c.BurnWidth, 0.5f, 1.0f, 20.0f);
                     AddConfigValueSliderIncrement(parent, c.BurnOpacity, 0.05f, 0.0f, 1.0f);
-                    AddConfigValueSliderIncrement(parent, c.BurnFloorOffset, 0.01f, -0.5f, 0.5f);
+                    AddConfigValueSliderIncrement(parent, c.BurnFloorOffset, 0.05f, -1.0f, 2.0f);
                     AddConfigValueToggle(parent, c.BurnSparkles);
                     break;
+                default: PreviewControls(parent, h); break;
             }
         }
     }

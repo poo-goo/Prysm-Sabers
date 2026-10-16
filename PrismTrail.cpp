@@ -290,6 +290,7 @@ Color PrismTrail::BaseColor(float now) const {
 
 void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float speedFactor, float blurFactor) {
     static constexpr int SoftCross = 8;
+    static constexpr int CurveCross = 16;  // more points across the blade so the exponential edge looks smooth
     auto cfg = ReadLayer(which);
     auto& c = getConfig();
     bool perf = c.PerformanceMode.GetValue();
@@ -301,7 +302,7 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
     }
     int gran = std::clamp(cfg.granularity, 2, perf ? 12 : 96);
     float soft = perf ? 0.0f : std::clamp(cfg.soft, 0.0f, 1.0f);
-    int cross = (isCurve || soft > 0.01f) ? SoftCross : 2;
+    int cross = isCurve ? CurveCross : (soft > 0.01f ? SoftCross : 2);
     layer->Resize(gran, cross, c.FlipTrailV.GetValue(), !c.TrailTextureFade.GetValue());
     layer->SetVisible(true);
     layer->SetSolid(cfg.solid, SolidMaterial());
@@ -316,14 +317,18 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
     // Positions across the blade (fraction of blade length) and their opacity weights.
     float span = std::max(cfg.tip - cfg.base, 0.1f);
     float f = soft * span * 0.3f;
-    float tpos[SoftCross], wgt[SoftCross];
+    float tpos[CurveCross], wgt[CurveCross], lag[CurveCross];
     if (isCurve) {
-        // "Curve": a sheet that is solid at the tip and fades toward the hilt, so the blade looks like it bends with speed
-        float taper = std::clamp(c.CurveTaper.GetValue(), 0.2f, 6.0f);
-        for (int j = 0; j < SoftCross; j++) {
-            float fr = (float) j / (SoftCross - 1);
+        // "Curve": every point along the blade trails behind by its own amount of time. The hilt does not lag at all,
+        // the tip lags the most, and the lag grows exponentially, so the swept sheet is bounded by an exponential
+        // curve (zero width at the hilt, long at the tip) - exactly the shape of an exponential graph.
+        float taper = std::clamp(c.CurveTaper.GetValue(), 0.0f, 6.0f);
+        float bend = std::clamp(c.CurveBend.GetValue(), 0.0f, 12.0f);
+        for (int j = 0; j < CurveCross; j++) {
+            float fr = (float) j / (CurveCross - 1);
             tpos[j] = cfg.base + (cfg.tip - cfg.base) * fr;
-            wgt[j] = std::pow(fr, taper);
+            wgt[j] = taper < 0.01f ? 1.0f : std::pow(fr, taper);
+            lag[j] = bend < 0.05f ? fr : (std::exp(bend * fr) - 1.0f) / (std::exp(bend) - 1.0f);
         }
     } else if (cross == 2) {
         tpos[0] = cfg.base;
@@ -388,7 +393,12 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
 
         for (int j = 0; j < cross; j++) {
             int idx = i * cross + j;
-            verts[idx] = Add(s.bottom, Mul(blade, tpos[j]));
+            if (isCurve) {
+                auto sj = Evaluate(now - duration * u * lag[j]);
+                verts[idx] = Add(sj.bottom, Mul(Sub(sj.top, sj.bottom), tpos[j]));
+            } else {
+                verts[idx] = Add(s.bottom, Mul(blade, tpos[j]));
+            }
             float aj = a * wgt[j];
             cols[idx] = solidMode ? Color{col.r, col.g, col.b, aj} : Color{col.r * aj, col.g * aj, col.b * aj, aj};
         }

@@ -33,7 +33,7 @@ DECLARE_CONFIG(Config) {
     CONFIG_VALUE(FlipTrailV, bool, "Flip Trail Tex", true, "Flips the trail texture across the blade. Turn off if trails look upside down");
     CONFIG_VALUE(PreviewX, float, "Preview Left/Right", -1.5f, "Meters from your head when the tab opens (negative = left)");
     CONFIG_VALUE(PreviewY, float, "Preview Height", -0.9f, "Meters relative to your head (negative = lower)");
-    CONFIG_VALUE(PreviewZ, float, "Preview Depth", 1.4f, "Meters in front of you (the menu is further away than this)");
+    CONFIG_VALUE(PreviewZ, float, "Preview Depth", 2.2f, "Meters in front of you (the menu is further away than this)");
     CONFIG_VALUE(ConfigVersion, int, "Config Version", 0);
     CONFIG_VALUE(PreviewScale, float, "Preview Size", 1.0f, "Scale of the menu preview sabers");
     CONFIG_VALUE(PerformanceMode, bool, "Performance Mode", false, "Caps detail at 12, disables blur and softness");
@@ -59,6 +59,7 @@ DECLARE_CONFIG(Config) {
     TRAIL_LAYER(Blur, "Blur", true, 0.035f, 14, 0.0f, 1.0f, 0.55f, 0.3f, 0.2f, 0.8f, false, 0, 1.0f, 1.0f, 1.0f, 1.0f)
     TRAIL_LAYER(Curve, "Curve", true, 0.11f, 48, 0.0f, 1.0f, 0.95f, 0.0f, 0.0f, 0.0f, true, 0, 1.0f, 1.0f, 1.0f, 1.0f)
     TRAIL_LAYER(Ribbon, "Ribbon", true, 0.07f, 28, 0.965f, 1.0f, 1.0f, 0.2f, 0.5f, 0.0f, true, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    CONFIG_VALUE(CurveBend, float, "Curve Bend", 4.0f, "Shape of the curve sheet: 0 = straight wedge, higher = sharper exponential curve (thin at the hilt, long at the tip)");
     CONFIG_VALUE(CurveTaper, float, "Curve Taper", 0.0f, "How strongly the curve sheet narrows toward the hilt (higher = more whip-like)");
     CONFIG_VALUE(BlurSnap, bool, "Blur Snap", true, "Blur switches on/off instantly with speed (like ReeSabers) instead of fading");
     CONFIG_VALUE(BlurSpread, float, "Blur Spread", 0.35f, "How much of the blur extends ahead of the saber (0 = trailing only, higher = blurs the saber itself)");
