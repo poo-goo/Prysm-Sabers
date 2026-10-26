@@ -44,8 +44,8 @@ namespace PrysmSabers {
             c.MainSolid.SetValue(true, false);
             c.CurveSolid.SetValue(true, false);
             c.RibbonSolid.SetValue(true, false);
-            c.GlowSolid.SetValue(false, false);
-            c.BlurSolid.SetValue(false, false);
+            c.GlowSolid.SetValue(true, false);
+            c.BlurSolid.SetValue(true, false);
             c.BladeGradient.SetValue(p.bladeGradient, false);
             c.CurveTaper.SetValue(p.taper, false);
             c.CurveBend.SetValue(p.bend, false);
@@ -74,6 +74,7 @@ namespace PrysmSabers {
         Color white(1, 1, 1, 1);
         Layer off{false, 0.1f, 16, 0.0f, 1.0f, 0.5f, 1.0f, 0.0f, 0.0f, SaberColor, white};
         c.PerformanceMode.SetValue(false, false);
+        c.CrystalFacets.SetValue(9, false);
         c.HideVanillaTrail.SetValue(true, false);
         c.BurnSparkles.SetValue(true, false);
         c.CutExplosion.SetValue(1.0f, false);

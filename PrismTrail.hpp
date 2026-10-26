@@ -34,6 +34,8 @@ DECLARE_CLASS_CODEGEN(PrysmSabers, PrismTrailLayer, UnityEngine::MonoBehaviour) 
     void Resize(int granularity, int cross, bool flipV, bool flatU);
     void ResizeQuads(int quadCount);  // particle mode: independent quads, 4 vertices each
     void SetSolid(bool solid, UnityEngine::Material* solidMaterial);
+    // faceted mode: every quad has its own 4 vertices, so each facet can have its own flat colour
+    void ResizeFacets(int rows, int cols, bool flipV, bool flatU);
     void Upload();
     void SetVisible(bool visible);
 };
@@ -97,7 +99,7 @@ DECLARE_CLASS_CODEGEN(PrysmSabers, PrismTrail, UnityEngine::MonoBehaviour) {
     static constexpr int PCap = 96;
     struct Particle {
         UnityEngine::Vector3 pos, vel, n, e1, e2;
-        float age, life, size, alpha, rot, spin, t, r, w, phase, blur;
+        float age, life, size, alpha, rot, spin, t, r, w, phase, blur, lag;
         float jit[8];
         int kind;  // 0 flame wisp, 1 ember, 2 shard
     };

@@ -195,6 +195,48 @@ void PrismTrailLayer::ResizeQuads(int n) {
     mesh->set_triangles(triangles);
 }
 
+void PrismTrailLayer::ResizeFacets(int rows, int cols, bool flip, bool flat) {
+    int marker = 1000 + cols;
+    if (rows == granularity && crossCount == marker && flip == flipV && flat == flatU && vertices)
+        return;
+    granularity = rows;
+    crossCount = marker;
+    flipV = flip;
+    flatU = flat;
+    int n = rows * cols;
+    vertices = ArrayW<Vector3>(il2cpp_array_size_t(n * 4));
+    colors = ArrayW<Color>(il2cpp_array_size_t(n * 4));
+    uvs = ArrayW<Vector2>(il2cpp_array_size_t(n * 4));
+    triangles = ArrayW<int>(il2cpp_array_size_t(n * 6));
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            int b = (i * cols + j) * 4;
+            float u0 = flat ? 0.0f : (float) i / rows, u1 = flat ? 0.0f : (float) (i + 1) / rows;
+            float v0 = (float) j / cols, v1 = (float) (j + 1) / cols;
+            if (flip) {
+                v0 = 1.0f - v0;
+                v1 = 1.0f - v1;
+            }
+            uvs[b] = {u0, v0};
+            uvs[b + 1] = {u0, v1};
+            uvs[b + 2] = {u1, v0};
+            uvs[b + 3] = {u1, v1};
+            int t = (i * cols + j) * 6;
+            triangles[t] = b;
+            triangles[t + 1] = b + 1;
+            triangles[t + 2] = b + 2;
+            triangles[t + 3] = b + 2;
+            triangles[t + 4] = b + 1;
+            triangles[t + 5] = b + 3;
+        }
+    }
+    mesh->Clear();
+    mesh->set_vertices(vertices);
+    mesh->set_colors(colors);
+    mesh->set_uv(uvs);
+    mesh->set_triangles(triangles);
+}
+
 void PrismTrailLayer::SetSolid(bool solid, Material* solidMaterial) {
     if (solid && !solidMaterial)
         solid = false;
@@ -362,13 +404,22 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
         layer->SetVisible(false);
         return;
     }
-    int gran = std::clamp(cfg.granularity, 2, perf ? 12 : 96);
+    float crystal = (isBlur || perf) ? 0.0f : std::clamp(c.CrystalAmount.GetValue(), 0.0f, 1.0f);
+    bool facet = crystal > 0.01f;
+    int facets = std::clamp(c.CrystalFacets.GetValue(), 3, 24);
+    int gran = facet ? facets : std::clamp(cfg.granularity, 2, perf ? 12 : 96);
     float soft = perf ? 0.0f : std::clamp(cfg.soft, 0.0f, 1.0f);
-    int cross = isCurve ? CurveCross : (soft > 0.01f ? SoftCross : 2);
-    layer->Resize(gran, cross, c.FlipTrailV.GetValue(), !c.TrailTextureFade.GetValue());
+    int cross = isCurve ? (facet ? std::clamp(facets / 2 + 2, 4, 9) : CurveCross) : (soft > 0.01f ? SoftCross : 2);
     layer->SetVisible(true);
     layer->SetSolid(cfg.solid, SolidMaterial());
     bool solidMode = layer->useSolid;
+    // Solid layers ignore the game texture, so U does not matter. The game's glowing material needs the real U, because its
+    // texture is what shapes the glow (flattening U made those layers invisible).
+    bool flatU = solidMode;
+    if (facet)
+        layer->ResizeFacets(gran, cross - 1, c.FlipTrailV.GetValue(), flatU);
+    else
+        layer->Resize(gran, cross, c.FlipTrailV.GetValue(), flatU);
 
     Color base = BaseColor(now);
     float duration = std::max(cfg.duration, 0.005f);
@@ -386,8 +437,8 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
         // curve (zero width at the hilt, long at the tip) - exactly the shape of an exponential graph.
         float taper = std::clamp(c.CurveTaper.GetValue(), 0.0f, 6.0f);
         float bend = std::clamp(c.CurveBend.GetValue(), 0.0f, 12.0f);
-        for (int j = 0; j < CurveCross; j++) {
-            float fr = (float) j / (CurveCross - 1);
+        for (int j = 0; j < cross; j++) {
+            float fr = (float) j / (cross - 1);
             tpos[j] = cfg.base + (cfg.tip - cfg.base) * fr;
             wgt[j] = taper < 0.01f ? 1.0f : std::pow(fr, taper);
             lag[j] = bend < 0.05f ? fr : (std::exp(bend * fr) - 1.0f) / (std::exp(bend) - 1.0f);
@@ -413,14 +464,32 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
         wgt[3] = wgt[4] = 1.0f;
     }
 
+    // faceted layers are computed on a shared lattice first, then copied into unshared, flat-coloured facets
+    static std::vector<Vector3> latV;
+    static std::vector<Color> latC;
+    if (facet) {
+        latV.assign((size_t) (gran + 1) * cross, Vector3{0, 0, 0});
+        latC.assign((size_t) (gran + 1) * cross, Color{0, 0, 0, 0});
+    }
     auto verts = layer->vertices;
     auto cols = layer->colors;
+    auto putV = [&](int idx, Vector3 pos) {
+        if (facet)
+            latV[idx] = pos;
+        else
+            verts[idx] = pos;
+    };
+    auto putC = [&](int idx, Color col) {
+        if (facet)
+            latC[idx] = col;
+        else
+            cols[idx] = col;
+    };
     // Blur is centred on the blade: part of the window is ahead of the saber, the rest behind it,
     // and both sides fade smoothly. That makes it read as the saber itself being smeared, not as a trail.
     float spread = isBlur ? std::clamp(c.BlurSpread.GetValue(), 0.0f, 0.8f) : 0.0f;
     float lead = duration * spread;
     float fadeExp = std::clamp(cfg.fade, 0.0f, 1.0f) * 4.0f;  // 0 = no fade at all, 1 = very strong fade
-    float crystal = isBlur ? 0.0f : std::clamp(c.CrystalAmount.GetValue(), 0.0f, 1.0f);
     float window = duration + lead;
     for (int i = 0; i <= gran; i++) {
         float u = (float) i / gran;
@@ -456,22 +525,43 @@ void PrismTrail::BuildLayer(PrismTrailLayer* layer, int which, float now, float 
 
         for (int j = 0; j < cross; j++) {
             int idx = i * cross + j;
+            Vector3 pos;
             if (isCurve) {
                 auto sj = Evaluate(now - duration * u * lag[j]);
-                verts[idx] = Add(sj.bottom, Mul(Sub(sj.top, sj.bottom), tpos[j]));
+                pos = Add(sj.bottom, Mul(Sub(sj.top, sj.bottom), tpos[j]));
             } else {
-                verts[idx] = Add(s.bottom, Mul(blade, tpos[j]));
+                pos = Add(s.bottom, Mul(blade, tpos[j]));
             }
+            if (facet && i > 0 && i < gran && j > 0 && j < cross - 1)
+                pos = Add(pos, Mul(blade, (Hash3(i, j, which + 3) - 0.5f) * 0.07f * crystal));  // irregular facets
+            putV(idx, pos);
             float aj = a * wgt[j];
-            Color cj = col;
-            if (crystal > 0.01f) {
-                // crystalline: every vertex gets its own brightness/opacity, some get a white glint, so the sheet reads as facets
-                float hsh = Hash3(i, j, which);
-                aj *= 1.0f - crystal * 0.6f * hsh;
-                if (hsh > 0.8f)
-                    cj = Lerp(col, Color(1, 1, 1, 1), crystal * 0.7f);
+            putC(idx, solidMode ? Color{col.r, col.g, col.b, aj} : Color{col.r * aj, col.g * aj, col.b * aj, aj});
+        }
+    }
+    if (facet) {
+        auto fv = layer->vertices;
+        auto fc = layer->colors;
+        int fcols = cross - 1;
+        for (int i = 0; i < gran; i++) {
+            for (int j = 0; j < fcols; j++) {
+                int ia = i * cross + j, ib = ia + 1, ic = ia + cross, id = ic + 1;
+                int q = (i * fcols + j) * 4;
+                fv[q] = latV[ia];
+                fv[q + 1] = latV[ib];
+                fv[q + 2] = latV[ic];
+                fv[q + 3] = latV[id];
+                Color avg{(latC[ia].r + latC[ib].r + latC[ic].r + latC[id].r) * 0.25f, (latC[ia].g + latC[ib].g + latC[ic].g + latC[id].g) * 0.25f,
+                          (latC[ia].b + latC[ib].b + latC[ic].b + latC[id].b) * 0.25f, (latC[ia].a + latC[ib].a + latC[ic].a + latC[id].a) * 0.25f};
+                // flat shading: each facet is one brightness, a few catch the light
+                float shade = 1.0f - crystal * 0.55f * Hash3(i, j, which + 11);
+                float glint = Hash3(i * 3 + 1, j * 5 + 2, which + 23) > 0.82f ? crystal * 0.65f : 0.0f;
+                float white = solidMode ? 1.0f : avg.a;  // "white" in premultiplied terms is just alpha
+                Color out{(avg.r * shade) * (1.0f - glint) + white * glint, (avg.g * shade) * (1.0f - glint) + white * glint,
+                          (avg.b * shade) * (1.0f - glint) + white * glint, avg.a};
+                for (int k = 0; k < 4; k++)
+                    fc[q + k] = out;
             }
-            cols[idx] = solidMode ? Color{cj.r, cj.g, cj.b, aj} : Color{cj.r * aj, cj.g * aj, cj.b * aj, aj};
         }
     }
     layer->Upload();
@@ -724,7 +814,8 @@ void PrismTrail::UpdateParticles(float now, Vector3 bottom, Vector3 top) {
                 break;
             p->kind = 2;
             p->t = 0.1f + 0.9f * Rand01();
-            p->r = 0.025f + 0.05f * Rand01();
+            p->r = 0.010f + 0.030f * Rand01();  // close to the blade
+            p->lag = 0.02f + 0.09f * Rand01();   // each shard follows where the blade WAS a moment ago
             p->w = (Rand01() < 0.5f ? -1.0f : 1.0f) * (1.5f + 3.0f * Rand01());
             p->phase = 6.2831853f * Rand01();
             p->life = (1.2f + 2.3f * Rand01()) * lifeS;
@@ -800,7 +891,13 @@ void PrismTrail::UpdateParticles(float now, Vector3 bottom, Vector3 top) {
         } else {  // shard: orbits the blade, tumbles, glassy facets
             float th = p.phase + p.w * p.age;
             float rr = p.r * (1.0f + 0.15f * std::sin(p.age * 3.0f + p.phase));
-            Vector3 bp = Add(bottom, Mul(dirV, p.t));
+            Vector3 sb = bottom, st = top;
+            if (count >= 2) {
+                auto past = Evaluate(now - p.lag);
+                sb = past.bottom;
+                st = past.top;
+            }
+            Vector3 bp = Add(sb, Mul(Sub(st, sb), p.t));
             p.pos = Add(bp, Add(Mul(u, std::cos(th) * rr), Mul(v, std::sin(th) * rr)));
             float ph = p.rot + p.spin * p.age;
             Vector3 e1 = Rot(p.e1, p.n, ph), e2 = Rot(p.e2, p.n, ph);

@@ -6,6 +6,7 @@
 #include "UnityEngine/UI/LayoutElement.hpp"
 #include "bsml/shared/BSML-Lite.hpp"
 #include "PrismTrail.hpp"
+#include "SaberProbe.hpp"
 #include "config.hpp"
 
 using namespace UnityEngine;
@@ -23,8 +24,8 @@ namespace PrysmSabers {
     namespace {
         // The menu is split into pages. Only one page's controls exist at a time, which keeps the menu
         // fast to open, stops long lists from running off the panel, and avoids overlapping rows.
-        constexpr int SectionCount = 11;
-        constexpr char const* SectionNames[SectionCount] = {"General", "Colors", "Trail", "Curve", "Ribbon", "Aura", "Blur", "Saber", "Effects", "Particles", "Preview"};
+        constexpr int SectionCount = 12;
+        constexpr char const* SectionNames[SectionCount] = {"General", "Colors", "Trail", "Curve", "Ribbon", "Aura", "Blur", "Saber", "Effects", "Particles", "Import", "Preview"};
         int currentSection = 0;
 
         void FixHeight(UnityEngine::GameObject* go, float height) {
@@ -121,7 +122,6 @@ namespace PrysmSabers {
                     AddConfigValueToggle(parent, c.HideVanillaTrail);
                     AddConfigValueToggle(parent, c.PerformanceMode);
                     AddConfigValueToggle(parent, c.FlipTrailV);
-                    AddConfigValueToggle(parent, c.TrailTextureFade);
                     Header(parent, "Presets");
                     for (int i = 0; i < (int) PresetNames.size(); i++) {
                         BSML::Lite::CreateUIButton(parent, PresetNames[i], [i, h]() {
@@ -144,7 +144,12 @@ namespace PrysmSabers {
                     AddConfigValueSliderIncrement(parent, c.RainbowOffset, 0.05f, 0.0f, 1.0f);
                     AddConfigValueSliderIncrement(parent, c.GlowIntensity, 0.05f, 0.0f, 3.0f);
                     break;
-                case 2: LAYER_UI(Main) LAYER_SOFT(Main) break;
+                case 2:
+                    AddConfigValueSliderIncrement(parent, c.CrystalAmount, 0.05f, 0.0f, 1.0f);
+                    AddConfigValueIncrementInt(parent, c.CrystalFacets, 1, 3, 24);
+                    LAYER_UI(Main)
+                    LAYER_SOFT(Main)
+                    break;
                 case 3:
                     LAYER_UI(Curve)
                     AddConfigValueSliderIncrement(parent, c.CurveBend, 0.25f, 0.0f, 12.0f);
@@ -186,8 +191,22 @@ namespace PrysmSabers {
                     AddConfigValueSliderIncrement(parent, c.ParticleSize, 0.1f, 0.3f, 3.0f);
                     AddConfigValueSliderIncrement(parent, c.ParticleLife, 0.1f, 0.3f, 3.0f);
                     AddConfigValueToggle(parent, c.FlameBlade);
-                    AddConfigValueSliderIncrement(parent, c.CrystalAmount, 0.05f, 0.0f, 1.0f);
                     break;
+                case 10: {
+                    static std::string lastProbe;
+                    Header(parent, "Saber import test");
+                    auto info = BSML::Lite::CreateText(parent, "Put .saber / .whacker files in\nModData/.../Mods/PrysmSabers/Sabers\nthen press Scan. This only tests whether\nthey load on Quest.", TMPro::FontStyles::Normal, 3.0f);
+                    FixHeight(info->get_gameObject(), 16.0f);
+                    BSML::Lite::CreateUIButton(parent, "Scan sabers folder", [h]() {
+                        lastProbe = RunSaberProbe();
+                        Rebuild(h);
+                    });
+                    if (!lastProbe.empty()) {
+                        auto result = BSML::Lite::CreateText(parent, lastProbe, TMPro::FontStyles::Normal, 2.6f);
+                        FixHeight(result->get_gameObject(), 60.0f);
+                    }
+                    break;
+                }
                 default: PreviewControls(parent, h); break;
             }
         }

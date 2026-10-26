@@ -56,8 +56,8 @@ DECLARE_CONFIG(Config) {
     // Layers: (prefix, label, enabled, length, detail, start, end, opacity, fade, white, softness, colorSource, tint rgba)
     // Defaults = the "Prism" preset: curve sheet + tip ribbon + soft aura + snap blur.
     TRAIL_LAYER(Main, "Trail", false, 0.18f, 40, 0.0f, 1.0f, 0.8f, 0.35f, 0.05f, 0.0f, true, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Glow, "Aura", true, 0.09f, 24, 0.4f, 1.06f, 0.30f, 0.6f, 0.0f, 0.7f, false, 0, 1.0f, 1.0f, 1.0f, 1.0f)
-    TRAIL_LAYER(Blur, "Blur", true, 0.035f, 14, 0.0f, 1.0f, 0.55f, 0.3f, 0.2f, 0.8f, false, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Glow, "Aura", true, 0.09f, 24, 0.4f, 1.06f, 0.30f, 0.6f, 0.0f, 0.7f, true, 0, 1.0f, 1.0f, 1.0f, 1.0f)
+    TRAIL_LAYER(Blur, "Blur", true, 0.035f, 14, 0.0f, 1.0f, 0.55f, 0.3f, 0.2f, 0.8f, true, 0, 1.0f, 1.0f, 1.0f, 1.0f)
     TRAIL_LAYER(Curve, "Curve", true, 0.11f, 48, 0.0f, 1.0f, 0.95f, 0.0f, 0.0f, 0.0f, true, 0, 1.0f, 1.0f, 1.0f, 1.0f)
     TRAIL_LAYER(Ribbon, "Ribbon", true, 0.07f, 28, 0.965f, 1.0f, 1.0f, 0.2f, 0.5f, 0.0f, true, 0, 1.0f, 1.0f, 1.0f, 1.0f)
     CONFIG_VALUE(CurveBend, float, "Curve Bend", 4.0f, "Shape of the curve sheet: 0 = straight wedge, higher = sharper exponential curve (thin at the hilt, long at the tip)");
@@ -81,7 +81,8 @@ DECLARE_CONFIG(Config) {
     CONFIG_VALUE(ParticleSize, float, "Particle Size", 1.0f);
     CONFIG_VALUE(ParticleLife, float, "Particle Life", 1.0f, "How long particles stay before fading");
     CONFIG_VALUE(FlameBlade, bool, "Flame Blade", false, "Prysm saber blade flickers like a flame");
-    CONFIG_VALUE(CrystalAmount, float, "Crystal Trails", 0.0f, "Faceted, glassy look for the trail layers (0 = smooth)");
+    CONFIG_VALUE(CrystalFacets, int, "Crystal Facets", 9, "How many facets the crystal trails are made of (fewer = bigger, more angular)");
+    CONFIG_VALUE(CrystalAmount, float, "Crystal Trails", 0.0f, "Turns the trail layers into flat-shaded glass facets with glints (0 = off, 1 = full)");
 
     // Effects
     CONFIG_VALUE(CutSparkles, float, "Sparkles", 1.0f, "Multiplier for sparkle particles on note cuts");

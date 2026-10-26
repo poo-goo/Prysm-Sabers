@@ -27,7 +27,7 @@ extern "C" __attribute__((visibility("default"))) void setup(CModInfo* info) noe
     getConfig().Init(modInfo);
     // Older builds saved values that no longer mean the same thing (fade scale, taper, swapped start/end).
     // Reset to the Prysm preset once, so nothing stale leaks into the new defaults.
-    constexpr int CurrentConfigVersion = 6;
+    constexpr int CurrentConfigVersion = 7;
     if (getConfig().ConfigVersion.GetValue() < CurrentConfigVersion) {
         PrysmSabers::ApplyPreset(0);
         // preview placement changed meaning (now measured from your head), so reset it too
