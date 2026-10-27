@@ -7,6 +7,7 @@
 #include "bsml/shared/BSML-Lite.hpp"
 #include "PrismTrail.hpp"
 #include "SaberProbe.hpp"
+#include "SaberImport.hpp"
 #include "config.hpp"
 
 using namespace UnityEngine;
@@ -201,6 +202,31 @@ namespace PrysmSabers {
                         lastProbe = RunSaberProbe();
                         Rebuild(h);
                     });
+                    // spawn test: pick a bundle, spawn it in front of you, remove it again
+                    static int pickedBundle = 0;
+                    static std::string lastSpawn;
+                    auto bundles = ListSaberBundles();
+                    if (pickedBundle >= (int) bundles.size())
+                        pickedBundle = 0;
+                    Header(parent, "Spawn test");
+                    BSML::Lite::CreateUIButton(parent, bundles.empty() ? "No bundles found (scan first)" : "File: " + bundles[(size_t) pickedBundle] + "  (tap to change)", [h, n = bundles.size()]() {
+                        if (n > 0)
+                            pickedBundle = (pickedBundle + 1) % (int) n;
+                        Rebuild(h);
+                    });
+                    BSML::Lite::CreateUIButton(parent, "Spawn saber", [h]() {
+                        lastSpawn = SpawnTestSaber(pickedBundle);
+                        Rebuild(h);
+                    });
+                    BSML::Lite::CreateUIButton(parent, "Remove saber", [h]() {
+                        DespawnTestSaber();
+                        lastSpawn = "Removed.";
+                        Rebuild(h);
+                    });
+                    if (!lastSpawn.empty()) {
+                        auto result = BSML::Lite::CreateText(parent, lastSpawn, TMPro::FontStyles::Normal, 2.6f);
+                        FixHeight(result->get_gameObject(), 60.0f);
+                    }
                     if (!lastProbe.empty()) {
                         auto result = BSML::Lite::CreateText(parent, lastProbe, TMPro::FontStyles::Normal, 2.6f);
                         FixHeight(result->get_gameObject(), 60.0f);
