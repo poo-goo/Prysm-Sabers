@@ -6,6 +6,7 @@
 #include <iterator>
 #include <set>
 
+#include "BundleConvert.hpp"
 #include "SaberProbe.hpp"
 #include "UnityEngine/AssetBundle.hpp"
 #include "UnityEngine/Camera.hpp"
@@ -178,7 +179,29 @@ namespace PrysmSabers {
         auto loaded = LoadedShaders();
         WriteShaderList(loaded);
 
-        auto bundle = AssetBundle::LoadFromFile(path.string());
+        // Windows (.saber) bundles are converted on the headset first: the result is cached in Sabers/converted
+        fs::path loadPath = path;
+        {
+            std::error_code ec;
+            auto convDir = fs::path(ProbeFolder) / "converted";
+            fs::create_directories(convDir, ec);
+            auto convPath = convDir / (path.stem().string() + ".android.bundle");
+            bool cached = fs::exists(convPath, ec) && fs::last_write_time(convPath, ec) >= fs::last_write_time(path, ec);
+            if (cached) {
+                loadPath = convPath;
+                report += "Convert: using the converted copy from last time\n";
+            } else {
+                auto conv = ConvertBundleToAndroid(path.string(), convPath.string());
+                report += "Convert: " + conv.message + "\n";
+                if (!conv.ok) {
+                    return report;
+                }
+                if (conv.converted)
+                    loadPath = convPath;
+            }
+        }
+
+        auto bundle = AssetBundle::LoadFromFile(loadPath.string());
         if (!bundle) {
             report += "Unity refused the bundle.\n";
             return report;
