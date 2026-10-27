@@ -11,6 +11,12 @@ namespace PrysmSabers {
     // game has, and returns a report of what happened. Also writes spawn_report.txt and shaders.txt next to probe.txt.
     std::string SpawnTestSaber(int index);
 
+    // shader stand-ins the Import page cycles through (hilt = lit parts, fire = author effect shaders)
+    std::string HiltShaderOption();
+    std::string FireShaderOption();
+    void NextHiltShader();
+    void NextFireShader();
+
     void DespawnTestSaber();
     bool TestSaberVisible();
 }

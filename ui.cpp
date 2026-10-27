@@ -196,8 +196,8 @@ namespace PrysmSabers {
                 case 10: {
                     static std::string lastProbe;
                     Header(parent, "Saber import test");
-                    auto info = BSML::Lite::CreateText(parent, "Put .saber / .whacker files in\nModData/.../Mods/PrysmSabers/Sabers\nthen press Scan. This only tests whether\nthey load on Quest.", TMPro::FontStyles::Normal, 3.0f);
-                    FixHeight(info->get_gameObject(), 16.0f);
+                    auto info = BSML::Lite::CreateText(parent, "Files go in ModData/.../Mods/PrysmSabers/Sabers", TMPro::FontStyles::Normal, 2.8f);
+                    FixHeight(info->get_gameObject(), 8.0f);
                     BSML::Lite::CreateUIButton(parent, "Scan sabers folder", [h]() {
                         lastProbe = RunSaberProbe();
                         Rebuild(h);
@@ -216,6 +216,18 @@ namespace PrysmSabers {
                     });
                     BSML::Lite::CreateUIButton(parent, "Spawn saber", [h]() {
                         lastSpawn = SpawnTestSaber(pickedBundle);
+                        Rebuild(h);
+                    });
+                    BSML::Lite::CreateUIButton(parent, "Hilt shader: " + HiltShaderOption(), [h]() {
+                        NextHiltShader();
+                        if (TestSaberVisible())
+                            lastSpawn = SpawnTestSaber(pickedBundle);
+                        Rebuild(h);
+                    });
+                    BSML::Lite::CreateUIButton(parent, "Fire shader: " + FireShaderOption(), [h]() {
+                        NextFireShader();
+                        if (TestSaberVisible())
+                            lastSpawn = SpawnTestSaber(pickedBundle);
                         Rebuild(h);
                     });
                     BSML::Lite::CreateUIButton(parent, "Remove saber", [h]() {

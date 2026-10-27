@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <set>
 
 #include "SaberProbe.hpp"
@@ -74,41 +75,76 @@ namespace PrysmSabers {
             }
         }
 
-        Shader* FindFirst(std::initializer_list<char const*> names, std::string& chosen) {
-            for (auto n : names) {
-                if (auto s = Shader::Find(n)) {
-                    chosen = n;
+        // every shader currently loaded in the game (this includes ones from other mods and from the saber bundle itself)
+        using ShaderList = std::vector<std::pair<std::string, Shader*>>;
+
+        ShaderList LoadedShaders() {
+            ShaderList all;
+            auto shaders = Resources::FindObjectsOfTypeAll<Shader*>();
+            for (auto s : shaders) {
+                if (s)
+                    all.emplace_back(Str(s->get_name()), s);
+            }
+            return all;
+        }
+
+        void WriteShaderList(ShaderList const& all) {
+            std::set<std::string> lines;
+            for (auto const& [name, s] : all)
+                lines.insert(name + (s->get_isSupported() ? "" : "   (not supported)"));
+            std::ofstream out(std::string(ProbeFolder) + "/shaders.txt");
+            for (auto const& l : lines)
+                out << l << "\n";
+        }
+
+        // first shader with this exact name that actually works on this device
+        Shader* SupportedByName(ShaderList const& all, std::string const& name) {
+            for (auto const& [n, s] : all) {
+                if (n == name && s->get_isSupported())
                     return s;
+            }
+            return nullptr;
+        }
+
+        // options the Import page cycles through; "ORIGINAL" means "the saber's own shader, if a working copy is loaded"
+        constexpr char const* HiltOptions[] = {"ORIGINAL", "Custom/SimpleLit", "Legacy Shaders/VertexLit", "Particles/Standard Unlit", "Custom/OpaqueNeonLight", "Sprites/Default"};
+        constexpr char const* FireOptions[] = {"ORIGINAL", "Particles/Standard Unlit", "Sprites/Default", "Custom/TransparentNeonLight", "Custom/CustomParticles"};
+        int g_hiltOption = 1;
+        int g_fireOption = 1;
+
+        // Pick a working shader for a saber shader that only exists as a PC build.
+        Shader* ReplacementFor(ShaderList const& all, std::string const& original, std::string& chosen) {
+            auto o = Lower(original);
+            bool unlit = o.find("unlit glow") != std::string::npos;
+            bool hilt = !unlit && (o.find("lit glow") != std::string::npos || o.find("matcap") != std::string::npos);
+
+            if (unlit) {
+                if (auto s = SupportedByName(all, "Sprites/Default")) {
+                    chosen = "Sprites/Default";
+                    return s;
+                }
+            } else {
+                int start = hilt ? g_hiltOption : g_fireOption;
+                auto count = hilt ? std::size(HiltOptions) : std::size(FireOptions);
+                for (size_t i = 0; i < count; i++) {
+                    std::string name = hilt ? HiltOptions[(start + i) % count] : FireOptions[(start + i) % count];
+                    if (name == "ORIGINAL")
+                        name = original;
+                    if (auto s = SupportedByName(all, name)) {
+                        chosen = name;
+                        return s;
+                    }
                 }
             }
             chosen = "(none found)";
             return nullptr;
         }
-
-        // Pick a game shader to stand in for a saber shader that only works on PC.
-        Shader* ReplacementFor(std::string const& original, std::string& chosen) {
-            auto o = Lower(original);
-            if (o.find("unlit") == std::string::npos && o.find("lit glow") != std::string::npos)
-                return FindFirst({"Custom/SimpleLit", "Custom/Glow", "Sprites/Default"}, chosen);
-            if (o.find("unlit glow") != std::string::npos)
-                return FindFirst({"Custom/Glow", "Legacy Shaders/Particles/Additive", "Sprites/Default"}, chosen);
-            // author shaders (fire, matcap, ...): additive blending is the closest cheap look
-            return FindFirst({"Legacy Shaders/Particles/Additive", "Sprites/Default"}, chosen);
-        }
-
-        void WriteGameShaderList() {
-            std::set<std::string> names;
-            auto shaders = Resources::FindObjectsOfTypeAll<Shader*>();
-            for (auto s : shaders) {
-                if (s)
-                    names.insert(Str(s->get_name()));
-            }
-            std::ofstream out(std::string(ProbeFolder) + "/shaders.txt");
-            for (auto const& n : names)
-                out << n << "\n";
-            logger.info("Wrote {} game shader names", names.size());
-        }
     }
+
+    std::string HiltShaderOption() { return HiltOptions[g_hiltOption]; }
+    std::string FireShaderOption() { return FireOptions[g_fireOption]; }
+    void NextHiltShader() { g_hiltOption = (g_hiltOption + 1) % (int) std::size(HiltOptions); }
+    void NextFireShader() { g_fireOption = (g_fireOption + 1) % (int) std::size(FireOptions); }
 
     std::vector<std::string> ListSaberBundles() {
         std::vector<std::string> names;
@@ -139,7 +175,8 @@ namespace PrysmSabers {
         auto const& path = paths[(size_t) index];
         report += "File: " + path.filename().string() + "\n";
 
-        WriteGameShaderList();
+        auto loaded = LoadedShaders();
+        WriteShaderList(loaded);
 
         auto bundle = AssetBundle::LoadFromFile(path.string());
         if (!bundle) {
@@ -201,7 +238,7 @@ namespace PrysmSabers {
         tr->set_eulerAngles(Vector3{-90.0f, 0.0f, 0.0f});
 
         // shader swap
-        std::set<std::string> done;
+        std::set<void*> done;
         int renderers = 0, swapped = 0, unsupported = 0;
         auto rs = inst->GetComponentsInChildren<Renderer*>(true);
         for (auto r : rs) {
@@ -215,11 +252,10 @@ namespace PrysmSabers {
                 auto shader = m->get_shader();
                 std::string orig = shader ? Str(shader->get_name()) : "(no shader)";
                 bool ok = shader && shader->get_isSupported();
-                std::string key = Str(m->get_name()) + "|" + orig;
-                if (!done.insert(key).second)
+                if (!done.insert((void*) m).second)
                     continue;
                 std::string chosen;
-                auto repl = ReplacementFor(orig, chosen);
+                auto repl = ReplacementFor(loaded, orig, chosen);
                 report += "  mat '" + Str(m->get_name()) + "'  " + orig + (ok ? "  [supported]" : "  [NOT supported]") + " -> " + chosen + "\n";
                 if (!ok)
                     unsupported++;
