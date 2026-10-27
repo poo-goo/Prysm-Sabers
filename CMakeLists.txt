@@ -55,7 +55,7 @@ message(STATUS "inline-ish files in beatsaber-hook: ${_diag}")
 
 add_library(${COMPILE_ID} SHARED ${cpp_file_list} ${hook_cpp_list})
 target_include_directories(${COMPILE_ID} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(${COMPILE_ID} PRIVATE -llog)
+target_link_libraries(${COMPILE_ID} PRIVATE -llog -lz)
 
 include(extern.cmake)
 
