@@ -225,13 +225,14 @@ namespace PrysmSabers {
                     unsupported++;
                 if (repl) {
                     // keeps _MainTex / _Color, which the stand-in shaders also use
-                    Color tint{1, 1, 1, 1};
-                    bool hasColor = m->HasProperty("_Color");
-                    if (hasColor)
-                        tint = m->get_color();
-                    m->set_shader(repl);
-                    if (m->HasProperty("_TintColor"))
-                        m->SetColor("_TintColor", tint);
+                    if (m->HasProperty("_Color")) {
+                        auto tint = m->get_color();
+                        m->set_shader(repl);
+                        if (m->HasProperty("_TintColor"))
+                            m->SetColor("_TintColor", tint);
+                    } else {
+                        m->set_shader(repl);
+                    }
                     swapped++;
                 }
             }
