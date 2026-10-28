@@ -107,11 +107,13 @@ namespace PrysmSabers {
             return nullptr;
         }
 
-        // options the Import page cycles through; "ORIGINAL" means "the saber's own shader, if a working copy is loaded"
+        // options the Import page cycles through; "ORIGINAL" means "the saber's own shader, if a working copy is loaded".
+        // Defaults are ORIGINAL, which falls through to SimpleLit (hilt) / Sprites/Default (fire) when no working copy exists.
+        // Fire shells must stay see-through: an opaque shader there can black out the whole view.
         constexpr char const* HiltOptions[] = {"ORIGINAL", "Custom/SimpleLit", "Legacy Shaders/VertexLit", "Particles/Standard Unlit", "Custom/OpaqueNeonLight", "Sprites/Default"};
-        constexpr char const* FireOptions[] = {"ORIGINAL", "Particles/Standard Unlit", "Sprites/Default", "Custom/TransparentNeonLight", "Custom/CustomParticles"};
-        int g_hiltOption = 1;
-        int g_fireOption = 1;
+        constexpr char const* FireOptions[] = {"ORIGINAL", "Sprites/Default", "Legacy Shaders/Particles/Additive", "Custom/TransparentNeonLight", "Particles/Standard Unlit"};
+        int g_hiltOption = 0;
+        int g_fireOption = 0;
 
         // Pick a working shader for a saber shader that only exists as a PC build.
         Shader* ReplacementFor(ShaderList const& all, std::string const& original, std::string& chosen) {
