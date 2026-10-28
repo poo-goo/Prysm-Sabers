@@ -16,6 +16,7 @@
 #include "SaberProbe.hpp"
 #include "SaberImport.hpp"
 #include "config.hpp"
+#include "main.hpp"
 
 using namespace UnityEngine;
 
