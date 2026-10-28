@@ -230,6 +230,26 @@ namespace PrysmSabers {
         UnityW<AssetBundle> g_gameBundle;
         UnityW<GameObject> g_gamePrefab;
         std::string g_gamePath;
+
+        // gameplay messages go to game_report.txt next to probe.txt (the file is restarted once per game session)
+        void GameLog(std::string const& msg) {
+            static bool first = true;
+            std::ofstream out(std::string(ProbeFolder) + "/game_report.txt", first ? std::ios::trunc : std::ios::app);
+            first = false;
+            if (out)
+                out << msg << "\n";
+            logger.info("Imported saber: {}", msg);
+        }
+
+        // Unity refuses to load the same bundle twice, so only one of the two users (spawn test / gameplay) may hold it
+        void ReleaseGameBundle() {
+            if (g_gameBundle) {
+                g_gameBundle->Unload(false);
+                g_gameBundle = UnityW<AssetBundle>((AssetBundle*) nullptr);
+            }
+            g_gamePrefab = UnityW<GameObject>((GameObject*) nullptr);
+            g_gamePath.clear();
+        }
     }
 
     std::string BundlePathAt(int index) {
@@ -238,31 +258,31 @@ namespace PrysmSabers {
     }
 
     bool ApplyImportedSaber(GlobalNamespace::SaberModelController* model, bool left, std::string const& file, UnityEngine::Color tint) {
-        if (file.empty() || !model)
+        GameLog(std::string("Applying to the ") + (left ? "left" : "right") + " saber: " + file);
+        if (file.empty() || !model) {
+            GameLog("  no saber file chosen. On the Import page tap 'Use this saber in game'.");
             return false;
+        }
         std::error_code ec;
         fs::path path(file);
         if (!fs::exists(path, ec)) {
-            logger.warn("Imported saber file not found: {}", file);
+            GameLog("  file not found");
             return false;
         }
 
         if (!g_gamePrefab || g_gamePath != file) {
-            if (g_gameBundle) {
-                g_gameBundle->Unload(false);
-                g_gameBundle = UnityW<AssetBundle>((AssetBundle*) nullptr);
-            }
-            g_gamePrefab = UnityW<GameObject>((GameObject*) nullptr);
+            ReleaseGameBundle();
+            DespawnTestSaber();  // the Import page spawn test may still hold this bundle
             g_originals.clear();
 
             std::string report;
             auto loadPath = PrepareLoadPath(path, report);
-            logger.info("Imported saber: {}", report);
+            GameLog("  " + report);
             if (loadPath.empty())
                 return false;
             auto bundle = AssetBundle::LoadFromFile(loadPath.string());
             if (!bundle) {
-                logger.error("Imported saber: Unity refused {}", loadPath.string());
+                GameLog("  Unity refused the bundle: " + loadPath.string());
                 return false;
             }
             std::string prefabName;
@@ -276,18 +296,19 @@ namespace PrysmSabers {
             }
             auto prefab = prefabName.empty() ? nullptr : LoadAssetAs<GameObject*>(bundle, prefabName);
             if (!prefab) {
-                logger.error("Imported saber: no prefab found in {}", loadPath.string());
+                GameLog("  no prefab found in the bundle");
                 bundle->Unload(false);
                 return false;
             }
             g_gameBundle = bundle;
             g_gamePrefab = prefab;
             g_gamePath = file;
+            GameLog("  loaded prefab " + prefabName);
         }
 
         auto inst = InstantiateCopy(g_gamePrefab.ptr());
         if (!inst) {
-            logger.error("Imported saber: could not instantiate the prefab");
+            GameLog("  could not instantiate the prefab");
             return false;
         }
         inst->SetActive(true);
@@ -321,7 +342,7 @@ namespace PrysmSabers {
         std::string report;
         int renderers = 0, swapped = 0, unsupported = 0;
         SwapShaders(hand->get_gameObject(), LoadedShaders(), report, renderers, swapped, unsupported, &tint);
-        logger.info("Imported saber ({}): {} renderers, {} materials swapped, {} unsupported\n{}", left ? "left" : "right", renderers, swapped, unsupported, report);
+        GameLog("  done: " + std::to_string(renderers) + " renderers, " + std::to_string(swapped) + " materials swapped, " + std::to_string(unsupported) + " unsupported\n" + report);
         return true;
     }
 
@@ -347,6 +368,7 @@ namespace PrysmSabers {
     std::string SpawnTestSaber(int index) {
         std::string report;
         DespawnTestSaber();
+        ReleaseGameBundle();  // gameplay loads it again on the next song
 
         auto paths = BundlePaths();
         if (index < 0 || index >= (int) paths.size())
