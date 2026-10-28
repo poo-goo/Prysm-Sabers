@@ -1,9 +1,16 @@
 #include "ui.hpp"
 
+#include <algorithm>
+#include <filesystem>
+#include <functional>
+#include <string>
+
 #include "UnityEngine/GameObject.hpp"
 #include "UnityEngine/Object.hpp"
 #include "UnityEngine/Transform.hpp"
 #include "UnityEngine/UI/LayoutElement.hpp"
+#include "UnityEngine/Vector2.hpp"
+#include "UnityEngine/Vector3.hpp"
 #include "bsml/shared/BSML-Lite.hpp"
 #include "PrismTrail.hpp"
 #include "SaberProbe.hpp"
@@ -18,8 +25,14 @@ void PrysmSabers::PrysmTabWatcher::OnEnable() {
     if (getConfig().PreviewEnabled.GetValue())
         PrysmSabers::ShowPreview(get_transform());
 }
-void PrysmSabers::PrysmTabWatcher::OnDisable() { PrysmSabers::HidePreview(); }
-void PrysmSabers::PrysmTabWatcher::OnDestroy() { PrysmSabers::HidePreview(); }
+void PrysmSabers::PrysmTabWatcher::OnDisable() {
+    PrysmSabers::HidePreview();
+    PrysmSabers::CloseSaberLibrary();
+}
+void PrysmSabers::PrysmTabWatcher::OnDestroy() {
+    PrysmSabers::HidePreview();
+    PrysmSabers::CloseSaberLibrary();
+}
 
 namespace PrysmSabers {
     namespace {
@@ -71,6 +84,169 @@ namespace PrysmSabers {
             }
             Build(host.ptr());
         }
+
+        // ----------------------------------------------------------------------------------------------
+        // Saber library: a large floating panel (grab the handle to move it) for picking and equipping sabers
+        // ----------------------------------------------------------------------------------------------
+        UnityW<GameObject> g_library;
+        UnityW<Transform> g_libraryHost;
+        int g_libPick = 0;
+        int g_libPage = 0;
+        std::string g_libStatus = "Pick a saber from the list.";
+        constexpr int LibPerPage = 5;
+
+        int LibPages() { return std::max(1, ((int) ListSaberBundles().size() + LibPerPage - 1) / LibPerPage); }
+
+        void BuildLibrary(UnityW<Transform> host);
+
+        void RebuildLibrary() {
+            auto host = g_libraryHost;
+            if (!host)
+                return;
+            for (int i = host->get_childCount() - 1; i >= 0; i--) {
+                auto child = host->GetChild(i)->get_gameObject();
+                child->SetActive(false);
+                Object::Destroy(child);
+            }
+            BuildLibrary(host);
+        }
+
+        // keeps only the headline lines of a spawn report (the per-material lines are in spawn_report.txt)
+        std::string ShortReport(std::string const& report) {
+            std::string out, line;
+            for (size_t i = 0; i <= report.size(); i++) {
+                if (i == report.size() || report[i] == '\n') {
+                    if (!line.empty() && line[0] != ' ' && line.rfind("File:", 0) != 0 && line.rfind("Prefab:", 0) != 0 && line.rfind("Look in front", 0) != 0)
+                        out += (out.empty() ? "" : "\n") + line;
+                    line.clear();
+                } else {
+                    line += report[i];
+                }
+            }
+            return out.empty() ? "Done." : out;
+        }
+
+        using LibButton = std::pair<std::string, std::function<void()>>;
+
+        void LibraryRow(Transform* parent, std::vector<LibButton> const& buttons) {
+            auto row = BSML::Lite::CreateHorizontalLayoutGroup(parent);
+            FixHeight(row->get_gameObject(), 11.0f);
+            for (auto const& b : buttons)
+                BSML::Lite::CreateUIButton(row->get_transform(), b.first, b.second);
+        }
+
+        void BuildLibrary(UnityW<Transform> host) {
+            auto parent = host.ptr();
+            auto& c = getConfig();
+            auto bundles = ListSaberBundles();
+            int count = (int) bundles.size();
+            int pages = LibPages();
+            g_libPick = std::clamp(g_libPick, 0, std::max(count - 1, 0));
+            g_libPage = std::clamp(g_libPage, 0, pages - 1);
+
+            auto title = BSML::Lite::CreateText(parent, "<b><color=#7fdcff>Saber Library</color></b>", TMPro::FontStyles::Normal, 7.0f);
+            FixHeight(title->get_gameObject(), 10.0f);
+
+            std::string equipped = c.SaberModel.GetValue() == 2 ? c.ImportedSaber.GetValue() : std::string();
+            if (count == 0) {
+                auto none = BSML::Lite::CreateText(parent, "No sabers found.\nPut .saber or .whacker files in\nModData/com.beatgames.beatsaber/Mods/PrysmSabers/Sabers\nthen tap Scan.", TMPro::FontStyles::Normal, 4.0f);
+                FixHeight(none->get_gameObject(), 28.0f);
+            }
+            for (int i = g_libPage * LibPerPage; i < std::min(count, (g_libPage + 1) * LibPerPage); i++) {
+                bool picked = i == g_libPick;
+                bool inGame = !equipped.empty() && BundlePathAt(i) == equipped;
+                std::string label = (picked ? "> " : "   ") + bundles[(size_t) i] + (inGame ? "   [in game]" : "");
+                auto button = BSML::Lite::CreateUIButton(parent, label, [i]() {
+                    g_libPick = i;
+                    RebuildLibrary();
+                });
+                FixHeight(button->get_gameObject(), 10.0f);
+            }
+            if (pages > 1) {
+                LibraryRow(parent, {{"< Page", []() {
+                                         g_libPage = (g_libPage + LibPages() - 1) % LibPages();
+                                         RebuildLibrary();
+                                     }},
+                                    {fmt::format("{}/{}", g_libPage + 1, pages), []() {}},
+                                    {"Page >", []() {
+                                         g_libPage = (g_libPage + 1) % LibPages();
+                                         RebuildLibrary();
+                                     }}});
+            }
+
+            LibraryRow(parent, {{"Preview", []() {
+                                     g_libStatus = ShortReport(SpawnTestSaber(g_libPick));
+                                     RebuildLibrary();
+                                 }},
+                                {"Remove preview", []() {
+                                     DespawnTestSaber();
+                                     g_libStatus = "Preview removed.";
+                                     RebuildLibrary();
+                                 }},
+                                {"Use in game", []() {
+                                     auto file = BundlePathAt(g_libPick);
+                                     if (file.empty()) {
+                                         g_libStatus = "Pick a saber first (tap Scan if the list is empty).";
+                                     } else {
+                                         DespawnTestSaber();
+                                         getConfig().ImportedSaber.SetValue(file);
+                                         getConfig().SaberModel.SetValue(2);
+                                         g_libStatus = "Equipped. Start a song to see it in your hands.";
+                                     }
+                                     RebuildLibrary();
+                                 }}});
+            LibraryRow(parent, {{"Hilt: " + HiltShaderOption(), []() {
+                                     NextHiltShader();
+                                     if (TestSaberVisible())
+                                         g_libStatus = ShortReport(SpawnTestSaber(g_libPick));
+                                     RebuildLibrary();
+                                 }},
+                                {"Fire: " + FireShaderOption(), []() {
+                                     NextFireShader();
+                                     if (TestSaberVisible())
+                                         g_libStatus = ShortReport(SpawnTestSaber(g_libPick));
+                                     RebuildLibrary();
+                                 }},
+                                {"Scan", []() {
+                                     RunSaberProbe();
+                                     g_libStatus = "Scanned the Sabers folder.";
+                                     RebuildLibrary();
+                                 }},
+                                {"Close", []() { CloseSaberLibrary(); }}});
+
+            auto status = BSML::Lite::CreateText(parent, g_libStatus, TMPro::FontStyles::Normal, 3.6f);
+            FixHeight(status->get_gameObject(), 22.0f);
+        }
+
+        // BSML's floating-screen helper differs between versions, so it is only used when this build has it.
+        bool CreateLibraryScreen() {
+            auto make = [](auto size) -> bool {
+                if constexpr (requires { BSML::Lite::CreateFloatingScreen(size, Vector3{0, 1.4f, 2.0f}, Vector3{0, 0, 0}, 0.0f, true, true); }) {
+                    auto screen = BSML::Lite::CreateFloatingScreen(size, Vector3{-1.1f, 1.3f, 1.9f}, Vector3{0, -25.0f, 0}, 0.0f, true, true);
+                    if (!screen)
+                        return false;
+                    g_library = screen->get_gameObject();
+                    auto layout = BSML::Lite::CreateVerticalLayoutGroup(screen->get_transform());
+                    g_libraryHost = layout->get_transform();
+                    return true;
+                } else {
+                    return false;
+                }
+            };
+            return make(Vector2{110.0f, 95.0f});
+        }
+
+        void OpenSaberLibrary() {
+            if (g_library)
+                return;
+            if (!CreateLibraryScreen()) {
+                logger.warn("Floating screens are not available in this BSML build; saber library not shown");
+                return;
+            }
+            BuildLibrary(g_libraryHost);
+        }
+
+        bool SaberLibraryOpen() { return (bool) g_library; }
 
         // The preview has its own page so its controls do not crowd the General page
         void PreviewControls(Transform* parent, UnityW<Transform> h) {
@@ -194,71 +370,33 @@ namespace PrysmSabers {
                     AddConfigValueToggle(parent, c.FlameBlade);
                     break;
                 case 10: {
-                    static std::string lastProbe;
-                    Header(parent, "Saber import test");
-                    auto info = BSML::Lite::CreateText(parent, "Files go in ModData/.../Mods/PrysmSabers/Sabers", TMPro::FontStyles::Normal, 2.8f);
-                    FixHeight(info->get_gameObject(), 8.0f);
-                    BSML::Lite::CreateUIButton(parent, "Scan sabers folder", [h]() {
-                        lastProbe = RunSaberProbe();
+                    Header(parent, "Saber library");
+                    auto info = BSML::Lite::CreateText(parent, "Put .saber or .whacker files in the Sabers folder, then open the library to preview and equip them.", TMPro::FontStyles::Normal, 3.2f);
+                    FixHeight(info->get_gameObject(), 14.0f);
+                    BSML::Lite::CreateUIButton(parent, SaberLibraryOpen() ? "Close library" : "Open saber library", [h]() {
+                        if (SaberLibraryOpen())
+                            CloseSaberLibrary();
+                        else
+                            OpenSaberLibrary();
                         Rebuild(h);
                     });
-                    // spawn test: pick a bundle, spawn it in front of you, remove it again
-                    static int pickedBundle = 0;
-                    static std::string lastSpawn;
-                    auto bundles = ListSaberBundles();
-                    if (pickedBundle >= (int) bundles.size())
-                        pickedBundle = 0;
-                    Header(parent, "Spawn test");
-                    BSML::Lite::CreateUIButton(parent, bundles.empty() ? "No bundles found (scan first)" : "File: " + bundles[(size_t) pickedBundle] + "  (tap to change)", [h, n = bundles.size()]() {
-                        if (n > 0)
-                            pickedBundle = (pickedBundle + 1) % (int) n;
-                        Rebuild(h);
-                    });
-                    BSML::Lite::CreateUIButton(parent, "Spawn saber", [h]() {
-                        lastSpawn = SpawnTestSaber(pickedBundle);
-                        Rebuild(h);
-                    });
-                    BSML::Lite::CreateUIButton(parent, "Hilt shader: " + HiltShaderOption(), [h]() {
-                        NextHiltShader();
-                        if (TestSaberVisible())
-                            lastSpawn = SpawnTestSaber(pickedBundle);
-                        Rebuild(h);
-                    });
-                    BSML::Lite::CreateUIButton(parent, "Fire shader: " + FireShaderOption(), [h]() {
-                        NextFireShader();
-                        if (TestSaberVisible())
-                            lastSpawn = SpawnTestSaber(pickedBundle);
-                        Rebuild(h);
-                    });
-                    BSML::Lite::CreateUIButton(parent, "Use this saber in game", [h]() {
-                        auto file = BundlePathAt(pickedBundle);
-                        if (!file.empty()) {
-                            getConfig().ImportedSaber.SetValue(file);
-                            getConfig().SaberModel.SetValue(2);
-                            lastSpawn = "Saved. Start a song (or restart the map) to see it in your hands.";
-                        } else {
-                            lastSpawn = "Pick a file first (scan the folder).";
-                        }
-                        Rebuild(h);
-                    });
-                    BSML::Lite::CreateUIButton(parent, "Remove saber", [h]() {
-                        DespawnTestSaber();
-                        lastSpawn = "Removed.";
-                        Rebuild(h);
-                    });
-                    if (!lastSpawn.empty()) {
-                        auto result = BSML::Lite::CreateText(parent, lastSpawn, TMPro::FontStyles::Normal, 2.6f);
-                        FixHeight(result->get_gameObject(), 60.0f);
-                    }
-                    if (!lastProbe.empty()) {
-                        auto result = BSML::Lite::CreateText(parent, lastProbe, TMPro::FontStyles::Normal, 2.6f);
-                        FixHeight(result->get_gameObject(), 60.0f);
-                    }
+                    std::string equippedText = "No imported saber equipped";
+                    if (c.SaberModel.GetValue() == 2 && !c.ImportedSaber.GetValue().empty())
+                        equippedText = "In game: " + std::filesystem::path(c.ImportedSaber.GetValue()).filename().string();
+                    auto equipped = BSML::Lite::CreateText(parent, equippedText, TMPro::FontStyles::Normal, 3.4f);
+                    FixHeight(equipped->get_gameObject(), 8.0f);
                     break;
                 }
                 default: PreviewControls(parent, h); break;
             }
         }
+    }
+
+    void CloseSaberLibrary() {
+        if (g_library)
+            Object::Destroy(g_library.ptr());
+        g_library = UnityW<GameObject>((GameObject*) nullptr);
+        g_libraryHost = UnityW<Transform>((Transform*) nullptr);
     }
 
     void SettingsDidActivate(HMUI::ViewController* self, bool firstActivation, bool, bool) {

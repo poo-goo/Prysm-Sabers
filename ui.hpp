@@ -13,6 +13,8 @@ DECLARE_CLASS_CODEGEN(PrysmSabers, PrysmTabWatcher, UnityEngine::MonoBehaviour) 
 };
 
 namespace PrysmSabers {
+    // Closes the floating saber library panel if it is open
+    void CloseSaberLibrary();
     // Mod Settings page (fallback if the Gameplay Setup tab API is unavailable)
     void SettingsDidActivate(HMUI::ViewController* self, bool firstActivation, bool addedToHierarchy, bool screenSystemEnabling);
     // Player Options > Mods tab
