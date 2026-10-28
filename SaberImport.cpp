@@ -4,20 +4,25 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <set>
 
 #include "BundleConvert.hpp"
+#include "GlobalNamespace/SaberModelController.hpp"
 #include "SaberProbe.hpp"
 #include "UnityEngine/AssetBundle.hpp"
+#include "UnityEngine/Color.hpp"
 #include "UnityEngine/Camera.hpp"
 #include "UnityEngine/GameObject.hpp"
 #include "UnityEngine/Material.hpp"
+#include "UnityEngine/MeshRenderer.hpp"
 #include "UnityEngine/Object.hpp"
 #include "UnityEngine/Renderer.hpp"
 #include "UnityEngine/Resources.hpp"
 #include "UnityEngine/Shader.hpp"
 #include "UnityEngine/Transform.hpp"
 #include "UnityEngine/Vector3.hpp"
+#include "config.hpp"
 #include "main.hpp"
 
 using namespace UnityEngine;
@@ -111,9 +116,14 @@ namespace PrysmSabers {
         // Defaults are ORIGINAL, which falls through to SimpleLit (hilt) / Sprites/Default (fire) when no working copy exists.
         // Fire shells must stay see-through: an opaque shader there can black out the whole view.
         constexpr char const* HiltOptions[] = {"ORIGINAL", "Custom/SimpleLit", "Legacy Shaders/VertexLit", "Particles/Standard Unlit", "Custom/OpaqueNeonLight", "Sprites/Default"};
-        constexpr char const* FireOptions[] = {"ORIGINAL", "Sprites/Default", "Legacy Shaders/Particles/Additive", "Custom/TransparentNeonLight", "Particles/Standard Unlit"};
-        int g_hiltOption = 0;
-        int g_fireOption = 0;
+        constexpr char const* FireOptions[] = {"ORIGINAL", "Custom/CustomParticles", "Sprites/Default", "Particles/Standard Unlit", "Custom/Glowing"};
+        // the shader choices are saved in the config, so gameplay uses what you picked on the Import page
+        int HiltIndex() { return std::clamp(getConfig().ImportedHiltShader.GetValue(), 0, (int) std::size(HiltOptions) - 1); }
+        int FireIndex() { return std::clamp(getConfig().ImportedFireShader.GetValue(), 0, (int) std::size(FireOptions) - 1); }
+
+        // original shader name and support flag of each material, remembered before the first swap
+        // (materials are shared with the cached prefab, so a second spawn would otherwise see the stand-in shader)
+        std::map<void*, std::pair<std::string, bool>> g_originals;
 
         // Pick a working shader for a saber shader that only exists as a PC build.
         Shader* ReplacementFor(ShaderList const& all, std::string const& original, std::string& chosen) {
@@ -127,7 +137,7 @@ namespace PrysmSabers {
                     return s;
                 }
             } else {
-                int start = hilt ? g_hiltOption : g_fireOption;
+                int start = hilt ? HiltIndex() : FireIndex();
                 auto count = hilt ? std::size(HiltOptions) : std::size(FireOptions);
                 for (size_t i = 0; i < count; i++) {
                     std::string name = hilt ? HiltOptions[(start + i) % count] : FireOptions[(start + i) % count];
@@ -144,10 +154,176 @@ namespace PrysmSabers {
         }
     }
 
-    std::string HiltShaderOption() { return HiltOptions[g_hiltOption]; }
-    std::string FireShaderOption() { return FireOptions[g_fireOption]; }
-    void NextHiltShader() { g_hiltOption = (g_hiltOption + 1) % (int) std::size(HiltOptions); }
-    void NextFireShader() { g_fireOption = (g_fireOption + 1) % (int) std::size(FireOptions); }
+    std::string HiltShaderOption() { return HiltOptions[HiltIndex()]; }
+    std::string FireShaderOption() { return FireOptions[FireIndex()]; }
+    void NextHiltShader() { getConfig().ImportedHiltShader.SetValue((HiltIndex() + 1) % (int) std::size(HiltOptions)); }
+    void NextFireShader() { getConfig().ImportedFireShader.SetValue((FireIndex() + 1) % (int) std::size(FireOptions)); }
+
+    namespace {
+        // Converts Windows bundles to Android (cached in Sabers/converted). Returns the path to load, or empty on failure.
+        fs::path PrepareLoadPath(fs::path const& path, std::string& report) {
+            std::error_code ec;
+            auto convDir = fs::path(ProbeFolder) / "converted";
+            fs::create_directories(convDir, ec);
+            auto convPath = convDir / (path.stem().string() + ".android.bundle");
+            if (fs::exists(convPath, ec) && fs::last_write_time(convPath, ec) >= fs::last_write_time(path, ec)) {
+                report += "Convert: using the converted copy from last time\n";
+                return convPath;
+            }
+            auto conv = ConvertBundleToAndroid(path.string(), convPath.string());
+            report += "Convert: " + conv.message + "\n";
+            if (!conv.ok)
+                return {};
+            return conv.converted ? convPath : path;
+        }
+
+        // Replaces PC-only shaders on every renderer under root with ones that work on this device.
+        void SwapShaders(GameObject* root, ShaderList const& loaded, std::string& report, int& renderers, int& swapped, int& unsupported, Color const* tint = nullptr) {
+            std::set<void*> done;
+            auto rs = root->GetComponentsInChildren<Renderer*>(true);
+            for (auto r : rs) {
+                if (!r)
+                    continue;
+                renderers++;
+                auto mats = r->get_sharedMaterials();
+                for (auto m : mats) {
+                    if (!m)
+                        continue;
+                    if (!done.insert((void*) m).second)
+                        continue;
+                    std::string orig;
+                    bool ok;
+                    if (auto it = g_originals.find((void*) m); it != g_originals.end()) {
+                        orig = it->second.first;
+                        ok = it->second.second;
+                    } else {
+                        auto shader = m->get_shader();
+                        orig = shader ? Str(shader->get_name()) : "(no shader)";
+                        ok = shader && shader->get_isSupported();
+                        g_originals[(void*) m] = {orig, ok};
+                    }
+                    // saber shaders with a _CustomColors switch expect the game's saber color in _Color
+                    if (tint && m->HasProperty("_CustomColors") && m->GetFloat("_CustomColors") > 0.0f)
+                        m->SetColor("_Color", *tint);
+                    std::string chosen;
+                    auto repl = ReplacementFor(loaded, orig, chosen);
+                    report += "  mat '" + Str(m->get_name()) + "'  " + orig + (ok ? "  [supported]" : "  [NOT supported]") + " -> " + chosen + "\n";
+                    if (!ok)
+                        unsupported++;
+                    if (repl) {
+                        // keeps _MainTex / _Color, which the stand-in shaders also use
+                        if (m->HasProperty("_Color")) {
+                            auto tint = m->get_color();
+                            m->set_shader(repl);
+                            if (m->HasProperty("_TintColor"))
+                                m->SetColor("_TintColor", tint);
+                        } else {
+                            m->set_shader(repl);
+                        }
+                        swapped++;
+                    }
+                }
+            }
+        }
+
+        // the imported saber bundle used during gameplay stays loaded for the whole session
+        UnityW<AssetBundle> g_gameBundle;
+        UnityW<GameObject> g_gamePrefab;
+        std::string g_gamePath;
+    }
+
+    std::string BundlePathAt(int index) {
+        auto paths = BundlePaths();
+        return index >= 0 && index < (int) paths.size() ? paths[(size_t) index].string() : std::string();
+    }
+
+    bool ApplyImportedSaber(GlobalNamespace::SaberModelController* model, bool left, std::string const& file, UnityEngine::Color tint) {
+        if (file.empty() || !model)
+            return false;
+        std::error_code ec;
+        fs::path path(file);
+        if (!fs::exists(path, ec)) {
+            logger.warn("Imported saber file not found: {}", file);
+            return false;
+        }
+
+        if (!g_gamePrefab || g_gamePath != file) {
+            if (g_gameBundle) {
+                g_gameBundle->Unload(false);
+                g_gameBundle = UnityW<AssetBundle>((AssetBundle*) nullptr);
+            }
+            g_gamePrefab = UnityW<GameObject>((GameObject*) nullptr);
+            g_originals.clear();
+
+            std::string report;
+            auto loadPath = PrepareLoadPath(path, report);
+            logger.info("Imported saber: {}", report);
+            if (loadPath.empty())
+                return false;
+            auto bundle = AssetBundle::LoadFromFile(loadPath.string());
+            if (!bundle) {
+                logger.error("Imported saber: Unity refused {}", loadPath.string());
+                return false;
+            }
+            std::string prefabName;
+            if (auto names = bundle->GetAllAssetNames()) {
+                for (auto n : names) {
+                    if (Lower(Str(n)).ends_with(".prefab")) {
+                        prefabName = Str(n);
+                        break;
+                    }
+                }
+            }
+            auto prefab = prefabName.empty() ? nullptr : LoadAssetAs<GameObject*>(bundle, prefabName);
+            if (!prefab) {
+                logger.error("Imported saber: no prefab found in {}", loadPath.string());
+                bundle->Unload(false);
+                return false;
+            }
+            g_gameBundle = bundle;
+            g_gamePrefab = prefab;
+            g_gamePath = file;
+        }
+
+        auto inst = InstantiateCopy(g_gamePrefab.ptr());
+        if (!inst) {
+            logger.error("Imported saber: could not instantiate the prefab");
+            return false;
+        }
+        inst->SetActive(true);
+        auto instT = inst->get_transform();
+        auto hand = instT->Find(left ? "LeftSaber" : "RightSaber");
+        if (!hand)
+            hand = instT->Find(left ? "RightSaber" : "LeftSaber");
+        if (!hand)
+            hand = instT;
+
+        // hide the game's own saber meshes first, so the new model is not hidden with them
+        auto modelT = model->get_transform();
+        int layer = model->get_gameObject()->get_layer();
+        auto vanilla = model->GetComponentsInChildren<MeshRenderer*>(true);
+        for (auto r : vanilla) {
+            if (r)
+                r->set_enabled(false);
+        }
+
+        hand->SetParent(modelT, false);
+        hand->set_localPosition(Vector3{0, 0, 0});
+        hand->set_localEulerAngles(Vector3{0, 0, 0});
+        hand->set_localScale(Vector3{1, 1, 1});
+        for (auto t : hand->GetComponentsInChildren<Transform*>(true)) {
+            if (t)
+                t->get_gameObject()->set_layer(layer);
+        }
+        if (hand != instT)
+            Object::Destroy(inst);  // the unused hand and the root go away; the chosen hand now lives under the game saber
+
+        std::string report;
+        int renderers = 0, swapped = 0, unsupported = 0;
+        SwapShaders(hand->get_gameObject(), LoadedShaders(), report, renderers, swapped, unsupported, &tint);
+        logger.info("Imported saber ({}): {} renderers, {} materials swapped, {} unsupported\n{}", left ? "left" : "right", renderers, swapped, unsupported, report);
+        return true;
+    }
 
     std::vector<std::string> ListSaberBundles() {
         std::vector<std::string> names;
@@ -181,27 +357,9 @@ namespace PrysmSabers {
         auto loaded = LoadedShaders();
         WriteShaderList(loaded);
 
-        // Windows (.saber) bundles are converted on the headset first: the result is cached in Sabers/converted
-        fs::path loadPath = path;
-        {
-            std::error_code ec;
-            auto convDir = fs::path(ProbeFolder) / "converted";
-            fs::create_directories(convDir, ec);
-            auto convPath = convDir / (path.stem().string() + ".android.bundle");
-            bool cached = fs::exists(convPath, ec) && fs::last_write_time(convPath, ec) >= fs::last_write_time(path, ec);
-            if (cached) {
-                loadPath = convPath;
-                report += "Convert: using the converted copy from last time\n";
-            } else {
-                auto conv = ConvertBundleToAndroid(path.string(), convPath.string());
-                report += "Convert: " + conv.message + "\n";
-                if (!conv.ok) {
-                    return report;
-                }
-                if (conv.converted)
-                    loadPath = convPath;
-            }
-        }
+        fs::path loadPath = PrepareLoadPath(path, report);
+        if (loadPath.empty())
+            return report;
 
         auto bundle = AssetBundle::LoadFromFile(loadPath.string());
         if (!bundle) {
@@ -209,6 +367,7 @@ namespace PrysmSabers {
             return report;
         }
         g_bundle = bundle;
+        g_originals.clear();
 
         // find the saber prefab (lower-case asset path, e.g. assets/_customsaber.prefab)
         std::string prefabName;
@@ -263,41 +422,8 @@ namespace PrysmSabers {
         tr->set_eulerAngles(Vector3{-90.0f, 0.0f, 0.0f});
 
         // shader swap
-        std::set<void*> done;
         int renderers = 0, swapped = 0, unsupported = 0;
-        auto rs = inst->GetComponentsInChildren<Renderer*>(true);
-        for (auto r : rs) {
-            if (!r)
-                continue;
-            renderers++;
-            auto mats = r->get_sharedMaterials();
-            for (auto m : mats) {
-                if (!m)
-                    continue;
-                auto shader = m->get_shader();
-                std::string orig = shader ? Str(shader->get_name()) : "(no shader)";
-                bool ok = shader && shader->get_isSupported();
-                if (!done.insert((void*) m).second)
-                    continue;
-                std::string chosen;
-                auto repl = ReplacementFor(loaded, orig, chosen);
-                report += "  mat '" + Str(m->get_name()) + "'  " + orig + (ok ? "  [supported]" : "  [NOT supported]") + " -> " + chosen + "\n";
-                if (!ok)
-                    unsupported++;
-                if (repl) {
-                    // keeps _MainTex / _Color, which the stand-in shaders also use
-                    if (m->HasProperty("_Color")) {
-                        auto tint = m->get_color();
-                        m->set_shader(repl);
-                        if (m->HasProperty("_TintColor"))
-                            m->SetColor("_TintColor", tint);
-                    } else {
-                        m->set_shader(repl);
-                    }
-                    swapped++;
-                }
-            }
-        }
+        SwapShaders(inst, loaded, report, renderers, swapped, unsupported);
         report += "Spawned: " + std::to_string(renderers) + " renderers, " + std::to_string(swapped) + " materials swapped, " + std::to_string(unsupported) + " unsupported.\n";
         report += "Look in front of you. shaders.txt lists the game's shaders.\n";
 

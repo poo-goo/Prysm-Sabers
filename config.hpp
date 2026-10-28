@@ -5,7 +5,7 @@
 namespace PrysmSabers {
     enum ColorSource { SaberColor = 0, CustomColor = 1, Rainbow = 2, SaberToCustom = 3, GradientColor = 4 };
     inline std::vector<std::string> const ColorSourceNames = {"Saber", "Custom", "Rainbow", "Saber > Custom", "Gradient"};
-    inline std::vector<std::string> const SaberModelNames = {"Vanilla", "Prysm"};
+    inline std::vector<std::string> const SaberModelNames = {"Vanilla", "Prysm", "Imported"};
     inline std::vector<std::string> const ParticleStyleNames = {"Off", "Fire", "Shards"};
     inline std::vector<std::string> const SaberColorModeNames = {"Game", "Custom", "Rainbow"};
     inline std::vector<std::string> const CutColorModeNames = {"Saber", "White", "Rainbow"};
@@ -69,7 +69,10 @@ DECLARE_CONFIG(Config) {
 
     // Saber model
     CONFIG_VALUE(BladeGradient, bool, "Blade Gradient", false, "Prysm saber blade fades from the Grad Start to the Grad End colour (hilt to tip)");
-    CONFIG_VALUE(SaberModel, int, "Saber Model", 1, "0 = game saber, 1 = Prysm saber (black handle, simple thin blade)");
+    CONFIG_VALUE(SaberModel, int, "Saber Model", 1, "0 = game saber, 1 = Prysm saber (black handle, simple thin blade), 2 = imported saber (Import page)");
+    CONFIG_VALUE(ImportedHiltShader, int, "Imported Hilt Shader", 0, "Stand-in shader for lit saber parts (Import page cycles it)");
+    CONFIG_VALUE(ImportedFireShader, int, "Imported Fire Shader", 0, "Stand-in shader for particle and effect parts (Import page cycles it)");
+    CONFIG_VALUE(ImportedSaber, std::string, "Imported Saber", "", "Full path of the saber bundle used when Saber Model is Imported");
     CONFIG_VALUE(PositionOffset, UnityEngine::Vector3, "Pos Offset (cm)", UnityEngine::Vector3(0, 0, 0));
     CONFIG_VALUE(RotationOffset, UnityEngine::Vector3, "Rot Offset (deg)", UnityEngine::Vector3(0, 0, 0));
     CONFIG_VALUE(LengthScale, float, "Blade Length", 1.0f, "Visual only, hitboxes are unchanged");

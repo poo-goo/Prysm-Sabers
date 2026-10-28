@@ -299,19 +299,23 @@ namespace PrysmSabers {
             return pos == outSize && !rc.bad;
         }
 
-        bool Decompress(uint8_t const* src, size_t srcSize, Bytes& out, size_t outSize, unsigned type) {
-            out.resize(outSize);
+        bool Decompress(uint8_t const* src, size_t srcSize, uint8_t* dst, size_t outSize, unsigned type) {
             switch (type) {
                 case 0:
                     if (srcSize != outSize)
                         return false;
-                    std::memcpy(out.data(), src, outSize);
+                    std::memcpy(dst, src, outSize);
                     return true;
-                case 1: return Lzma(src, srcSize, out.data(), outSize);
+                case 1: return Lzma(src, srcSize, dst, outSize);
                 case 2:
-                case 3: return Lz4Block(src, srcSize, out.data(), outSize);
+                case 3: return Lz4Block(src, srcSize, dst, outSize);
                 default: return false;
             }
+        }
+
+        bool Decompress(uint8_t const* src, size_t srcSize, Bytes& out, size_t outSize, unsigned type) {
+            out.resize(outSize);
+            return Decompress(src, srcSize, out.data(), outSize, type);
         }
 
         uint32_t Be32(uint8_t const* p) { return ((uint32_t) p[0] << 24) | ((uint32_t) p[1] << 16) | ((uint32_t) p[2] << 8) | p[3]; }
@@ -441,7 +445,32 @@ namespace PrysmSabers {
             nodes.push_back(std::move(n));
         }
 
-        // decompress all data blocks into one buffer
+        // Cheap check first: decode only the start of the data and look at the platform. Already-Android bundles
+        // (the common case for .whacker files) then cost almost nothing and are never copied.
+        if (!blocks.empty() && !nodes.empty()) {
+            auto const& b0 = blocks[0];
+            size_t peekSize = std::min<size_t>(b0.usize, (b0.flags & 0x3f) == 1 ? 4096 : b0.usize);
+            Bytes head;
+            if (p + b0.csize <= file.size() && Decompress(&file[p], b0.csize, head, peekSize, b0.flags & 0x3f)) {
+                auto const& n0 = nodes[0];
+                if (n0.offset + 40 <= head.size() && Be32(&head[(size_t) n0.offset + 8]) >= 17 && Be32(&head[(size_t) n0.offset + 8]) <= 21) {
+                    size_t e = (size_t) n0.offset + 20;
+                    while (e < head.size() && head[e] != 0)
+                        e++;
+                    int32_t plat;
+                    if (e + 5 <= head.size()) {
+                        std::memcpy(&plat, &head[e + 1], 4);
+                        if (plat == AndroidPlatform) {
+                            res.ok = true;
+                            res.message = "already an Android bundle";
+                            return res;
+                        }
+                    }
+                }
+            }
+        }
+
+        // decompress all data blocks straight into one buffer
         Bytes data;
         {
             size_t totalSize = 0;
@@ -449,16 +478,15 @@ namespace PrysmSabers {
                 totalSize += b.usize;
             if (totalSize > 400u * 1024u * 1024u)
                 return fail("bundle too large");
-            data.reserve(totalSize);
-            size_t pos = p;
-            Bytes tmp;
+            data.resize(totalSize);
+            size_t pos = p, outPos = 0;
             for (auto const& b : blocks) {
                 if (pos + b.csize > file.size())
                     return fail("damaged data");
-                if (!Decompress(&file[pos], b.csize, tmp, b.usize, b.flags & 0x3f))
+                if (!Decompress(&file[pos], b.csize, &data[outPos], b.usize, b.flags & 0x3f))
                     return fail("could not decompress the bundle data");
-                data.insert(data.end(), tmp.begin(), tmp.end());
                 pos += b.csize;
+                outPos += b.usize;
             }
         }
         file.clear();
@@ -515,25 +543,25 @@ namespace PrysmSabers {
             newInfo.push_back(0);
         }
 
-        Bytes out;
-        out.insert(out.end(), {'U', 'n', 'i', 't', 'y', 'F', 'S', 0});
-        PutBe32(out, version);
-        out.insert(out.end(), playerVersion.begin(), playerVersion.end());
-        out.push_back(0);
-        out.insert(out.end(), engineVersion.begin(), engineVersion.end());
-        out.push_back(0);
-        size_t headerEnd = out.size() + 8 + 12;
-        PutBe64(out, headerEnd + newInfo.size() + data.size());
-        PutBe32(out, (uint32_t) newInfo.size());
-        PutBe32(out, (uint32_t) newInfo.size());
-        PutBe32(out, 0x40);
-        out.insert(out.end(), newInfo.begin(), newInfo.end());
-        out.insert(out.end(), data.begin(), data.end());
+        Bytes head;
+        head.insert(head.end(), {'U', 'n', 'i', 't', 'y', 'F', 'S', 0});
+        PutBe32(head, version);
+        head.insert(head.end(), playerVersion.begin(), playerVersion.end());
+        head.push_back(0);
+        head.insert(head.end(), engineVersion.begin(), engineVersion.end());
+        head.push_back(0);
+        size_t headerEnd = head.size() + 8 + 12;
+        PutBe64(head, headerEnd + newInfo.size() + data.size());
+        PutBe32(head, (uint32_t) newInfo.size());
+        PutBe32(head, (uint32_t) newInfo.size());
+        PutBe32(head, 0x40);
 
         std::ofstream o(outPath, std::ios::binary | std::ios::trunc);
         if (!o)
             return fail("cannot write the converted file");
-        o.write((char const*) out.data(), (std::streamsize) out.size());
+        o.write((char const*) head.data(), (std::streamsize) head.size());
+        o.write((char const*) newInfo.data(), (std::streamsize) newInfo.size());
+        o.write((char const*) data.data(), (std::streamsize) data.size());
         o.close();
         if (!o)
             return fail("writing the converted file failed");

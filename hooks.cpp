@@ -11,6 +11,7 @@
 #include "GlobalNamespace/SaberTrail.hpp"
 #include "GlobalNamespace/SaberTrailRenderer.hpp"
 #include "PrismTrail.hpp"
+#include "SaberImport.hpp"
 #include "UnityEngine/Color32.hpp"
 #include "UnityEngine/GameObject.hpp"
 #include "UnityEngine/Material.hpp"
@@ -43,8 +44,10 @@ MAKE_HOOK_MATCH(
     auto pos = c.PositionOffset.GetValue();
     auto rot = c.RotationOffset.GetValue();
     bool prysmModel = c.SaberModel.GetValue() == 1;
-    // the Prysm model builds its own blade width, so the game model is not thinned in that case
-    float thick = prysmModel ? 1.0f : c.ThicknessScale.GetValue(), length = c.LengthScale.GetValue();
+    bool importedModel = c.SaberModel.GetValue() == 2;
+    // the Prysm and imported models bring their own shape, so the game model is not thinned or stretched in those cases
+    float thick = (prysmModel || importedModel) ? 1.0f : c.ThicknessScale.GetValue();
+    float length = importedModel ? 1.0f : c.LengthScale.GetValue();
     auto lp = t->get_localPosition();
     t->set_localPosition(Vector3(lp.x + pos.x / 100.0f, lp.y + pos.y / 100.0f, lp.z + pos.z / 100.0f));
     t->set_localRotation(Quaternion::op_Multiply(t->get_localRotation(), Quaternion::Euler(rot.x, rot.y, rot.z)));
@@ -79,6 +82,8 @@ MAKE_HOOK_MATCH(
     prism->Setup(saber, self, material, layer);
     if (prysmModel)
         PrysmSabers::ApplyCustomModel(self, saber, prism);
+    else if (importedModel && !PrysmSabers::ApplyImportedSaber(self, prism->IsLeft(), c.ImportedSaber.GetValue(), trailTintColor))
+        logger.warn("Imported saber could not be applied; keeping the game saber model");
 
     // Only hide the vanilla trail once ours exists.
     if (trail && c.HideVanillaTrail.GetValue()) {

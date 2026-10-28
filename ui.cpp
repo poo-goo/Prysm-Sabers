@@ -230,6 +230,17 @@ namespace PrysmSabers {
                             lastSpawn = SpawnTestSaber(pickedBundle);
                         Rebuild(h);
                     });
+                    BSML::Lite::CreateUIButton(parent, "Use this saber in game", [h]() {
+                        auto file = BundlePathAt(pickedBundle);
+                        if (!file.empty()) {
+                            getConfig().ImportedSaber.SetValue(file);
+                            getConfig().SaberModel.SetValue(2);
+                            lastSpawn = "Saved. Start a song (or restart the map) to see it in your hands.";
+                        } else {
+                            lastSpawn = "Pick a file first (scan the folder).";
+                        }
+                        Rebuild(h);
+                    });
                     BSML::Lite::CreateUIButton(parent, "Remove saber", [h]() {
                         DespawnTestSaber();
                         lastSpawn = "Removed.";

@@ -3,6 +3,9 @@
 #include <string>
 #include <vector>
 
+#include "GlobalNamespace/SaberModelController.hpp"
+#include "UnityEngine/Color.hpp"
+
 namespace PrysmSabers {
     // Unity bundles found in the Sabers folder (and its extracted/ subfolder), as display names.
     std::vector<std::string> ListSaberBundles();
@@ -16,6 +19,13 @@ namespace PrysmSabers {
     std::string FireShaderOption();
     void NextHiltShader();
     void NextFireShader();
+
+    // Full path of bundle #index (as listed by ListSaberBundles), or empty.
+    std::string BundlePathAt(int index);
+
+    // Gameplay: puts the imported saber (Left/Right hand model) on a game saber and hides the vanilla meshes.
+    // Returns false if anything fails; the game saber is then left alone.
+    bool ApplyImportedSaber(GlobalNamespace::SaberModelController* model, bool left, std::string const& file, UnityEngine::Color tint);
 
     void DespawnTestSaber();
     bool TestSaberVisible();
