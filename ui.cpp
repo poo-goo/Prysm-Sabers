@@ -16,6 +16,8 @@
 #include "UnityEngine/UI/LayoutElement.hpp"
 #include "bsml/shared/BSML-Lite.hpp"
 #include "bsml/shared/BSML.hpp"
+#include "bsml/shared/Helpers/creation.hpp"
+#include "bsml/shared/Helpers/getters.hpp"
 #include "config.hpp"
 #include "main.hpp"
 
